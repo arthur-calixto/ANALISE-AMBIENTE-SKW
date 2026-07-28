@@ -1,0 +1,2 @@
+-- TODO: colar aqui a query de logins de API (versão SQL Server).
+-- Mesmo formato de colunas: TITULO, CONTAGEM, DETALHE

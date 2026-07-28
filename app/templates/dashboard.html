@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <title>Análise de Ambiente — {{ cliente_id }}</title>
+    <style>
+        body { font-family: system-ui, sans-serif; margin: 2rem; background: #f7f7f8; }
+        h1 { font-size: 1.4rem; }
+        h2 { font-size: 1.1rem; margin-top: 0; }
+        .meta { color: #555; margin-bottom: 1.5rem; }
+        button { background: #2563eb; color: white; border: none; padding: 0.6rem 1.2rem;
+                 border-radius: 6px; font-size: 1rem; cursor: pointer; }
+        button:disabled { background: #93c5fd; cursor: wait; }
+        table { border-collapse: collapse; width: 100%; margin-top: 0.5rem; background: white; }
+        th, td { border: 1px solid #ddd; padding: 0.4rem 0.6rem; font-size: 0.85rem; text-align: left; }
+        th { background: #f0f0f0; }
+        tr.alerta { background: #fef2f2; color: #7f1d1d; }
+        section { margin-top: 2rem; }
+        .erro { color: #b91c1c; }
+
+        .cards-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+                      gap: 1rem; margin-top: 0.5rem; }
+        .card { border-radius: 10px; padding: 1rem; color: white; }
+        .card.ok { background: linear-gradient(135deg, #16a34a, #15803d); }
+        .card.alerta { background: linear-gradient(135deg, #dc2626, #b91c1c); }
+        .card.indefinido { background: linear-gradient(135deg, #6b7280, #4b5563); }
+        .card .titulo { font-size: 0.75rem; letter-spacing: 0.05em; text-transform: uppercase;
+                         opacity: 0.85; margin-bottom: 0.5rem; }
+        .card .linha { display: flex; justify-content: space-between; font-size: 0.85rem; }
+        .card .linha .valor { font-weight: 600; }
+
+        .contagem-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+                          gap: 1rem; margin-top: 0.5rem; }
+        .contagem-card { background: white; border: 1px solid #e5e5e5; border-radius: 10px; padding: 1rem; }
+        .contagem-card.alerta { border-color: #dc2626; background: #fef2f2; }
+        .contagem-card.alerta .numero { color: #b91c1c; }
+        .contagem-card .titulo { font-size: 0.85rem; color: #555; margin-bottom: 0.25rem;
+                                  word-break: break-word; }
+        .contagem-card .numero { font-size: 1.8rem; font-weight: 700; color: #1e293b; }
+        .contagem-card .detalhe { font-size: 0.75rem; color: #777; margin-top: 0.5rem; line-height: 1.4; }
+    </style>
+</head>
+<body>
+    <h1>Análise de Ambiente</h1>
+    <div class="meta">Cliente: <strong>{{ cliente_id }}</strong> — Banco: <strong>{{ db_type }}</strong></div>
+
+    <button id="btn-executar">Executar Análise</button>
+    <div id="resultado"></div>
+
+    <script>
+        const sessionId = "{{ session_id }}";
+        const checks = {{ checks | tojson }};
+        const btn = document.getElementById("btn-executar");
+        const resultadoDiv = document.getElementById("resultado");
+
+        function renderTabela(linhas) {
+            if (!linhas || linhas.length === 0) return "<p>Nenhum resultado.</p>";
+            const temStatus = "STATUS" in linhas[0];
+            const colunas = Object.keys(linhas[0]).filter(c => c !== "STATUS");
+            let html = "<table><thead><tr>";
+            colunas.forEach(c => html += `<th>${c}</th>`);
+            html += "</tr></thead><tbody>";
+            linhas.forEach(row => {
+                const classe = temStatus && String(row.STATUS).toLowerCase() === "alerta" ? ' class="alerta"' : "";
+                html += `<tr${classe}>` + colunas.map(c => `<td>${row[c] ?? ""}</td>`).join("") + "</tr>";
+            });
+            html += "</tbody></table>";
+            return html;
+        }
+
+        function renderCards(linhas) {
+            if (!linhas || linhas.length === 0) return "<p>Nenhum resultado.</p>";
+            let html = '<div class="cards-grid">';
+            linhas.forEach(row => {
+                const status = (row.STATUS || "indefinido").toLowerCase();
+                const esperado = row.ESPERADO ?? "";
+                const atual = row.ATUAL ?? "";
+                html += `
+                    <div class="card ${status}">
+                        <div class="titulo">${row.PARAMETRO ?? ""}</div>
+                        <div class="linha"><span>Esperado:</span><span class="valor">${esperado}</span></div>
+                        <div class="linha"><span>Atual:</span><span class="valor">${atual}</span></div>
+                    </div>`;
+            });
+            html += "</div>";
+            return html;
+        }
+
+        function renderContagem(linhas) {
+            if (!linhas || linhas.length === 0) return "<p>Nenhum resultado.</p>";
+            let html = '<div class="contagem-grid">';
+            linhas.forEach(row => {
+                const status = String(row.STATUS || "").toLowerCase() === "alerta" ? "alerta" : "";
+                html += `
+                    <div class="contagem-card ${status}">
+                        <div class="titulo">${row.TITULO ?? ""}</div>
+                        <div class="numero">${row.CONTAGEM ?? ""}</div>
+                        <div class="detalhe">${row.DETALHE ?? ""}</div>
+                    </div>`;
+            });
+            html += "</div>";
+            return html;
+        }
+
+        btn.addEventListener("click", async () => {
+            btn.disabled = true;
+            btn.textContent = "Executando...";
+            resultadoDiv.innerHTML = "";
+
+            try {
+                const resp = await fetch(`/analise/${sessionId}/executar`, { method: "POST" });
+                const data = await resp.json();
+
+                checks.forEach(check => {
+                    const erro = data[`${check.id}_erro`];
+                    let corpo;
+                    if (erro) {
+                        corpo = `<p class="erro">Erro: ${erro}</p>`;
+                    } else if (check.exibicao === "cards") {
+                        corpo = renderCards(data[check.id]);
+                    } else if (check.exibicao === "contagem") {
+                        corpo = renderContagem(data[check.id]);
+                    } else {
+                        corpo = renderTabela(data[check.id]);
+                    }
+                    resultadoDiv.innerHTML += `<section><h2>${check.titulo}</h2>${corpo}</section>`;
+                });
+            } catch (e) {
+                resultadoDiv.innerHTML = `<p class="erro">Falha ao executar análise: ${e}</p>`;
+            } finally {
+                btn.disabled = false;
+                btn.textContent = "Executar Análise";
+            }
+        });
+    </script>
+</body>
+</html>

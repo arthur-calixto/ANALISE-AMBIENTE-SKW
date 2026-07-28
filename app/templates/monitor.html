@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <title>Análise de Monitor de Consulta</title>
+    <style>
+        body { font-family: system-ui, sans-serif; margin: 2rem; background: #f7f7f8; }
+        h1 { font-size: 1.4rem; }
+        h2 { font-size: 1.1rem; margin-top: 0; }
+        .meta { color: #555; margin-bottom: 1.5rem; }
+        button { background: #2563eb; color: white; border: none; padding: 0.6rem 1.2rem;
+                 border-radius: 6px; font-size: 1rem; cursor: pointer; }
+        button:disabled { background: #93c5fd; cursor: wait; }
+        input[type=file] { margin-bottom: 1rem; display: block; }
+        table { border-collapse: collapse; width: 100%; margin-top: 0.5rem; background: white; }
+        th, td { border: 1px solid #ddd; padding: 0.4rem 0.6rem; font-size: 0.85rem; text-align: left; }
+        th { background: #f0f0f0; }
+        td.sql { font-family: ui-monospace, monospace; font-size: 0.75rem; max-width: 500px;
+                 overflow-wrap: break-word; }
+        section { margin-top: 2rem; }
+        .erro { color: #b91c1c; }
+        .resumo { display: flex; gap: 1.5rem; margin-top: 1rem; }
+        .resumo .item { background: white; border: 1px solid #e5e5e5; border-radius: 8px;
+                         padding: 0.75rem 1.25rem; }
+        .resumo .item .numero { font-size: 1.4rem; font-weight: 700; }
+        .resumo .item .label { font-size: 0.75rem; color: #666; }
+
+        .contagem-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+                          gap: 1rem; margin-top: 0.5rem; }
+        .contagem-card { background: white; border: 1px solid #e5e5e5; border-radius: 10px; padding: 1rem; }
+        .contagem-card .titulo { font-size: 0.85rem; color: #333; margin-bottom: 0.25rem;
+                                  font-weight: 600; word-break: break-word; }
+        .contagem-card .numero { font-size: 1.5rem; font-weight: 700; color: #1e293b; }
+        .contagem-card .detalhe { font-size: 0.75rem; color: #777; margin-top: 0.5rem; }
+    </style>
+</head>
+<body>
+    <h1>Análise de Monitor de Consulta</h1>
+    <div class="meta">Envie o zip exportado pelo monitor de consulta/processos do Sankhya.</div>
+
+    <input type="file" id="arquivo" accept=".zip">
+    <button id="btn-analisar">Analisar</button>
+    <div id="resultado"></div>
+
+    <script>
+        const btn = document.getElementById("btn-analisar");
+        const inputArquivo = document.getElementById("arquivo");
+        const resultadoDiv = document.getElementById("resultado");
+
+        function renderTabelaQueries(linhas) {
+            if (!linhas || linhas.length === 0) return "<p>Nenhum resultado.</p>";
+            let html = "<table><thead><tr><th>ID</th><th>Tempo (ms)</th><th>Application</th><th>ResourceID</th><th>SQL</th></tr></thead><tbody>";
+            linhas.forEach(row => {
+                html += `<tr>
+                    <td>${row.ID}</td>
+                    <td>${row.TEMPO_MS}</td>
+                    <td>${row.APPLICATION}</td>
+                    <td>${row.RESOURCE_ID}</td>
+                    <td class="sql">${row.SQL}</td>
+                </tr>`;
+            });
+            html += "</tbody></table>";
+            return html;
+        }
+
+        function renderContagem(linhas) {
+            if (!linhas || linhas.length === 0) return "<p>Nenhum resultado.</p>";
+            let html = '<div class="contagem-grid">';
+            linhas.forEach(row => {
+                html += `
+                    <div class="contagem-card">
+                        <div class="titulo">${row.TITULO}</div>
+                        <div class="numero">${row.CONTAGEM}</div>
+                        <div class="detalhe">${row.DETALHE}</div>
+                    </div>`;
+            });
+            html += "</div>";
+            return html;
+        }
+
+        btn.addEventListener("click", async () => {
+            if (!inputArquivo.files.length) {
+                resultadoDiv.innerHTML = '<p class="erro">Selecione o arquivo .zip primeiro.</p>';
+                return;
+            }
+
+            btn.disabled = true;
+            btn.textContent = "Analisando...";
+            resultadoDiv.innerHTML = "";
+
+            const formData = new FormData();
+            formData.append("arquivo", inputArquivo.files[0]);
+
+            try {
+                const resp = await fetch("/monitor/analisar", { method: "POST", body: formData });
+                const data = await resp.json();
+
+                if (data.erro) {
+                    resultadoDiv.innerHTML = `<p class="erro">${data.erro}</p>`;
+                } else {
+                    resultadoDiv.innerHTML = `
+                        <div class="resumo">
+                            <div class="item"><div class="numero">${data.total_registros}</div><div class="label">Queries analisadas</div></div>
+                            <div class="item"><div class="numero">${data.tempo_total_ms}</div><div class="label">Tempo total (ms)</div></div>
+                        </div>
+                        <section><h2>Top Queries Mais Lentas</h2>${renderTabelaQueries(data.top_queries)}</section>
+                        <section><h2>Top Processos (Application / ResourceID)</h2>${renderContagem(data.top_processos)}</section>
+                    `;
+                }
+            } catch (e) {
+                resultadoDiv.innerHTML = `<p class="erro">Falha ao analisar: ${e}</p>`;
+            } finally {
+                btn.disabled = false;
+                btn.textContent = "Analisar";
+            }
+        });
+    </script>
+</body>
+</html>

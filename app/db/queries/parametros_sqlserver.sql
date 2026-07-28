@@ -1,0 +1,2 @@
+-- TODO: colar aqui a query de parâmetros do ambiente (versão SQL Server).
+-- Mesmo formato de colunas do placeholder Oracle: PARAMETRO, ESPERADO, ATUAL
