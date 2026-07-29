@@ -1,11 +1,12 @@
 from pathlib import Path
 
-from fastapi import APIRouter, Request
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi import APIRouter, Body, Request
+from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
 from fastapi.templating import Jinja2Templates
 
 from app import db
 from app.checks import CHECKS
+from app.pdf_report import gerar_relatorio_pdf
 from app.session import InvalidSessionId, SessionNotFound, load_credentials
 
 router = APIRouter(prefix="/analise", tags=["analise"])
@@ -68,3 +69,29 @@ def executar_analise(session_id: str):
             resultados[f"{check.id}_erro"] = str(exc)
 
     return JSONResponse(resultados)
+
+
+@router.post("/{session_id}/relatorio")
+def gerar_relatorio(session_id: str, resultados: dict = Body(...)):
+    try:
+        credentials = load_credentials(session_id)
+    except (SessionNotFound, InvalidSessionId) as exc:
+        return JSONResponse({"erro": str(exc)}, status_code=404)
+
+    checks_meta = [
+        {"id": c.id, "titulo": c.titulo, "exibicao": c.exibicao.value} for c in CHECKS
+    ]
+
+    pdf_buffer = gerar_relatorio_pdf(
+        cliente_id=credentials.get("cliente_id", session_id),
+        db_type=credentials.get("db_type", "-"),
+        checks_meta=checks_meta,
+        resultados=resultados,
+    )
+
+    nome_arquivo = f"analise-ambiente-{credentials.get('cliente_id', session_id)}.pdf"
+    return StreamingResponse(
+        pdf_buffer,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{nome_arquivo}"'},
+    )

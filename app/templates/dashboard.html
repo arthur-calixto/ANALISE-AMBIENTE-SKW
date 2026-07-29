@@ -2,56 +2,36 @@
 <html lang="pt-br">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Análise de Ambiente — {{ cliente_id }}</title>
-    <style>
-        body { font-family: system-ui, sans-serif; margin: 2rem; background: #f7f7f8; }
-        h1 { font-size: 1.4rem; }
-        h2 { font-size: 1.1rem; margin-top: 0; }
-        .meta { color: #555; margin-bottom: 1.5rem; }
-        button { background: #2563eb; color: white; border: none; padding: 0.6rem 1.2rem;
-                 border-radius: 6px; font-size: 1rem; cursor: pointer; }
-        button:disabled { background: #93c5fd; cursor: wait; }
-        table { border-collapse: collapse; width: 100%; margin-top: 0.5rem; background: white; }
-        th, td { border: 1px solid #ddd; padding: 0.4rem 0.6rem; font-size: 0.85rem; text-align: left; }
-        th { background: #f0f0f0; }
-        tr.alerta { background: #fef2f2; color: #7f1d1d; }
-        section { margin-top: 2rem; }
-        .erro { color: #b91c1c; }
-
-        .cards-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-                      gap: 1rem; margin-top: 0.5rem; }
-        .card { border-radius: 10px; padding: 1rem; color: white; }
-        .card.ok { background: linear-gradient(135deg, #16a34a, #15803d); }
-        .card.alerta { background: linear-gradient(135deg, #dc2626, #b91c1c); }
-        .card.indefinido { background: linear-gradient(135deg, #6b7280, #4b5563); }
-        .card .titulo { font-size: 0.75rem; letter-spacing: 0.05em; text-transform: uppercase;
-                         opacity: 0.85; margin-bottom: 0.5rem; }
-        .card .linha { display: flex; justify-content: space-between; font-size: 0.85rem; }
-        .card .linha .valor { font-weight: 600; }
-
-        .contagem-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
-                          gap: 1rem; margin-top: 0.5rem; }
-        .contagem-card { background: white; border: 1px solid #e5e5e5; border-radius: 10px; padding: 1rem; }
-        .contagem-card.alerta { border-color: #dc2626; background: #fef2f2; }
-        .contagem-card.alerta .numero { color: #b91c1c; }
-        .contagem-card .titulo { font-size: 0.85rem; color: #555; margin-bottom: 0.25rem;
-                                  word-break: break-word; }
-        .contagem-card .numero { font-size: 1.8rem; font-weight: 700; color: #1e293b; }
-        .contagem-card .detalhe { font-size: 0.75rem; color: #777; margin-top: 0.5rem; line-height: 1.4; }
-    </style>
+    <link rel="stylesheet" href="/static/styles.css">
 </head>
 <body>
-    <h1>Análise de Ambiente</h1>
-    <div class="meta">Cliente: <strong>{{ cliente_id }}</strong> — Banco: <strong>{{ db_type }}</strong></div>
+    <div class="topbar">
+        <span class="pulse"></span>
+        <span class="marca">ANÁLISE<span class="sub">/ambiente</span></span>
+        <nav><a href="/">← início</a></nav>
+    </div>
 
-    <button id="btn-executar">Executar Análise</button>
-    <div id="resultado"></div>
+    <main class="page">
+        <div class="eyebrow">Análise geral do ambiente</div>
+        <h1>{{ cliente_id }}</h1>
+        <div class="meta">Banco: <strong>{{ db_type }}</strong></div>
+
+        <button id="btn-executar">Executar Análise</button>
+        <button id="btn-pdf" class="btn-secundario" style="display:none;">Baixar Relatório PDF</button>
+        <div id="resumo"></div>
+        <div id="resultado"></div>
+    </main>
 
     <script>
         const sessionId = "{{ session_id }}";
         const checks = {{ checks | tojson }};
         const btn = document.getElementById("btn-executar");
+        const btnPdf = document.getElementById("btn-pdf");
+        const resumoDiv = document.getElementById("resumo");
         const resultadoDiv = document.getElementById("resultado");
+        let ultimoResultado = null;
 
         function renderTabela(linhas) {
             if (!linhas || linhas.length === 0) return "<p>Nenhum resultado.</p>";
@@ -78,8 +58,8 @@
                 html += `
                     <div class="card ${status}">
                         <div class="titulo">${row.PARAMETRO ?? ""}</div>
-                        <div class="linha"><span>Esperado:</span><span class="valor">${esperado}</span></div>
-                        <div class="linha"><span>Atual:</span><span class="valor">${atual}</span></div>
+                        <div class="linha"><span>Esperado</span><span class="valor">${esperado}</span></div>
+                        <div class="linha"><span>Atual</span><span class="valor">${atual}</span></div>
                     </div>`;
             });
             html += "</div>";
@@ -102,14 +82,42 @@
             return html;
         }
 
+        function contarStatus(data) {
+            const contagem = { ok: 0, alerta: 0, indefinido: 0 };
+            checks.forEach(check => {
+                const linhas = data[check.id];
+                if (!linhas) return;
+                linhas.forEach(row => {
+                    if (!("STATUS" in row)) return;
+                    const s = String(row.STATUS || "").toLowerCase();
+                    if (contagem[s] !== undefined) contagem[s]++;
+                });
+            });
+            return contagem;
+        }
+
+        function renderResumo(contagem) {
+            return `
+                <div class="resumo-alertas">
+                    <div class="resumo-chip"><span class="ponto alerta"></span><span class="num">${contagem.alerta}</span> em alerta</div>
+                    <div class="resumo-chip"><span class="ponto indefinido"></span><span class="num">${contagem.indefinido}</span> sem baseline</div>
+                    <div class="resumo-chip"><span class="ponto ok"></span><span class="num">${contagem.ok}</span> ok</div>
+                </div>`;
+        }
+
         btn.addEventListener("click", async () => {
             btn.disabled = true;
             btn.textContent = "Executando...";
+            resumoDiv.innerHTML = "";
             resultadoDiv.innerHTML = "";
 
             try {
                 const resp = await fetch(`/analise/${sessionId}/executar`, { method: "POST" });
                 const data = await resp.json();
+
+                resumoDiv.innerHTML = renderResumo(contarStatus(data));
+                ultimoResultado = data;
+                btnPdf.style.display = "inline-block";
 
                 checks.forEach(check => {
                     const erro = data[`${check.id}_erro`];
@@ -130,6 +138,34 @@
             } finally {
                 btn.disabled = false;
                 btn.textContent = "Executar Análise";
+            }
+        });
+
+        btnPdf.addEventListener("click", async () => {
+            if (!ultimoResultado) return;
+            btnPdf.disabled = true;
+            btnPdf.textContent = "Gerando PDF...";
+            try {
+                const resp = await fetch(`/analise/${sessionId}/relatorio`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(ultimoResultado),
+                });
+                if (!resp.ok) throw new Error("Falha ao gerar PDF");
+                const blob = await resp.blob();
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement("a");
+                a.href = url;
+                a.download = `analise-ambiente-${sessionId}.pdf`;
+                document.body.appendChild(a);
+                a.click();
+                a.remove();
+                window.URL.revokeObjectURL(url);
+            } catch (e) {
+                alert("Erro ao gerar PDF: " + e);
+            } finally {
+                btnPdf.disabled = false;
+                btnPdf.textContent = "Baixar Relatório PDF";
             }
         });
     </script>

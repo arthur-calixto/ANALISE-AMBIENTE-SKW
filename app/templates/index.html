@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Análise de Ambiente Sankhya</title>
+    <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+    <div class="topbar">
+        <span class="pulse"></span>
+        <span class="marca">ANÁLISE<span class="sub">/ambiente</span></span>
+    </div>
+
+    <main class="page">
+        <div class="eyebrow">Painel de diagnóstico</div>
+        <h1>O que você quer analisar?</h1>
+        <div class="meta">Ferramentas de diagnóstico de ambientes Sankhya — banco de dados, parâmetros e monitor de consulta.</div>
+
+        <div class="tiles">
+            <div class="tile" id="tile-analise">
+                <svg class="icone" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+                    <ellipse cx="12" cy="5" rx="8" ry="3"></ellipse>
+                    <path d="M4 5v6c0 1.66 3.58 3 8 3s8-1.34 8-3V5"></path>
+                    <path d="M4 11v6c0 1.66 3.58 3 8 3s8-1.34 8-3v-6"></path>
+                </svg>
+                <div class="titulo">Análise Geral do Ambiente</div>
+                <div class="descricao">Locks, nível de personalização, parâmetros, jobs com falha e eventos com erro — direto no banco do cliente.</div>
+                <div class="ir">→ requer link de sessão do server-tool</div>
+
+                <form class="form-sessao" onsubmit="return abrirSessao(event)">
+                    <input type="text" id="input-session-id" placeholder="colar session_id aqui" autocomplete="off">
+                    <button type="submit" class="btn-secundario">Abrir</button>
+                </form>
+            </div>
+
+            <a class="tile" href="/monitor">
+                <svg class="icone" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M2 12h4l2 8 4-16 3 12 2-4h5"></path>
+                </svg>
+                <div class="titulo">Monitor de Consulta</div>
+                <div class="descricao">Envie o zip do monitor de consulta/processos e veja as queries mais lentas e os processos que mais consomem tempo.</div>
+                <div class="ir">Abrir →</div>
+            </a>
+        </div>
+    </main>
+
+    <script>
+        function abrirSessao(ev) {
+            ev.preventDefault();
+            const id = document.getElementById("input-session-id").value.trim();
+            if (id) window.location.href = `/analise/${id}`;
+            return false;
+        }
+    </script>
+</body>
+</html>

@@ -6,3 +6,4 @@ oracledb==4.0.2
 pyodbc==5.1.0
 pydantic-settings==2.5.2
 python-multipart==0.0.12
+reportlab==4.2.5

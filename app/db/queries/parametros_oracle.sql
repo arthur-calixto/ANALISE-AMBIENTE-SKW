@@ -24,14 +24,14 @@ SELECT 'INATSESSTIMEOUT', '= 5',
 FROM DUAL LEFT JOIN TSIPAR t ON t.CHAVE = 'INATSESSTIMEOUT'
 UNION ALL
 SELECT 'DEBUG_ENVMSGJOB', '= N',
-       COALESCE(TO_CHAR(t.LOGICO), 'N(padrão)'),
-       CASE WHEN t.LOGICO IS NULL THEN 'ok'
+       COALESCE(TO_CHAR(t.LOGICO), 'não definido (sem padrão conhecido)'),
+       CASE WHEN t.LOGICO IS NULL THEN 'indefinido'
             WHEN t.LOGICO = 'N' THEN 'ok' ELSE 'alerta' END
 FROM DUAL LEFT JOIN TSIPAR t ON t.CHAVE = 'DEBUG_ENVMSGJOB'
 UNION ALL
 SELECT 'DEBUGXMLSANNFE', '= N',
-       COALESCE(TO_CHAR(t.LOGICO), 'N (padrão)'),
-       CASE WHEN t.LOGICO IS NULL THEN 'ok'
+       COALESCE(TO_CHAR(t.LOGICO), 'não definido (sem padrão conhecido)'),
+       CASE WHEN t.LOGICO IS NULL THEN 'indefinido'
             WHEN t.LOGICO = 'N' THEN 'ok' ELSE 'alerta' END
 FROM DUAL LEFT JOIN TSIPAR t ON t.CHAVE = 'DEBUGXMLSANNFE'
 UNION ALL

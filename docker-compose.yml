@@ -11,4 +11,9 @@ services:
       - /repositorio-compartilhado:/app/data:ro
     env_file:
       - .env
+    environment:
+      # Força o caminho de dentro do container, independente do que
+      # estiver no .env do host (que normalmente aponta pra ./data,
+      # usado quando roda fora do Docker).
+      - SHARED_DIR=/app/data
     restart: unless-stopped
