@@ -3,12 +3,12 @@ services:
     build: .
     container_name: analise-ambiente
     ports:
-      - "8000:8000"
+      - "8590:8590"
     volumes:
       # Diretório compartilhado onde o server-tool.sh grava as sessões
       # (credentials.json por session_id). Ajustar o lado esquerdo
       # pro caminho real no host.
-      - /repositorio-compartilhado:/app/data:ro
+      - /home/arthur/Área de trabalho/analise-ambiente/data:/app/data:ro
     env_file:
       - .env
     environment:
