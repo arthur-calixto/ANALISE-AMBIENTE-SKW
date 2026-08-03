@@ -1,12 +1,12 @@
-SELECT 'CALCCUSTOASSINC' AS PARAMETRO, '= 2' AS ESPERADO,
-       COALESCE(TO_CHAR(t.INTEIRO), 'não definido (sem padrão conhecido)') AS ATUAL,
-       CASE WHEN t.INTEIRO IS NULL THEN 'indefinido'
+SELECT 'CALCCUSTOASSINC' AS PARAMETRO, '= 2 (Por item)' AS ESPERADO,
+       COALESCE(TO_CHAR(t.INTEIRO), 'Desligado (Padrão)') AS ATUAL,
+       CASE WHEN t.INTEIRO IS NULL THEN 'alerta'
             WHEN t.INTEIRO = 2 THEN 'ok' ELSE 'alerta' END AS STATUS
 FROM DUAL LEFT JOIN TSIPAR t ON t.CHAVE = 'CALCCUSTOASSINC'
 UNION ALL
 SELECT 'MAXRSLTSIZE', '<= 2000',
-       COALESCE(TO_CHAR(t.INTEIRO), 'não definido (sem padrão conhecido)'),
-       CASE WHEN t.INTEIRO IS NULL THEN 'indefinido'
+       COALESCE(TO_CHAR(t.INTEIRO), '5000 (Padrão)'),
+       CASE WHEN t.INTEIRO IS NULL THEN 'alerta'
             WHEN t.INTEIRO <= 2000 THEN 'ok' ELSE 'alerta' END
 FROM DUAL LEFT JOIN TSIPAR t ON t.CHAVE = 'MAXRSLTSIZE'
 UNION ALL
@@ -18,20 +18,20 @@ SELECT 'REFRESHCARDS', '= 60',
 FROM DUAL LEFT JOIN TSIPAR t ON t.CHAVE = 'REFRESHCARDS'
 UNION ALL
 SELECT 'INATSESSTIMEOUT', '= 5',
-       COALESCE(TO_CHAR(t.TEXTO), 'não definido (sem padrão conhecido)'),
-       CASE WHEN t.TEXTO IS NULL THEN 'indefinido'
+       COALESCE(TO_CHAR(t.TEXTO), '0 (Padrão)'),
+       CASE WHEN t.TEXTO IS NULL THEN 'alerta'
             WHEN t.TEXTO = '5' THEN 'ok' ELSE 'alerta' END
 FROM DUAL LEFT JOIN TSIPAR t ON t.CHAVE = 'INATSESSTIMEOUT'
 UNION ALL
 SELECT 'DEBUG_ENVMSGJOB', '= N',
-       COALESCE(TO_CHAR(t.LOGICO), 'não definido (sem padrão conhecido)'),
-       CASE WHEN t.LOGICO IS NULL THEN 'indefinido'
+       COALESCE(TO_CHAR(t.LOGICO), 'Desligado (Padrão)'),
+       CASE WHEN t.LOGICO IS NULL THEN 'ok'
             WHEN t.LOGICO = 'N' THEN 'ok' ELSE 'alerta' END
 FROM DUAL LEFT JOIN TSIPAR t ON t.CHAVE = 'DEBUG_ENVMSGJOB'
 UNION ALL
 SELECT 'DEBUGXMLSANNFE', '= N',
-       COALESCE(TO_CHAR(t.LOGICO), 'não definido (sem padrão conhecido)'),
-       CASE WHEN t.LOGICO IS NULL THEN 'indefinido'
+       COALESCE(TO_CHAR(t.LOGICO), 'Desligado (Padrão)'),
+       CASE WHEN t.LOGICO IS NULL THEN 'ok'
             WHEN t.LOGICO = 'N' THEN 'ok' ELSE 'alerta' END
 FROM DUAL LEFT JOIN TSIPAR t ON t.CHAVE = 'DEBUGXMLSANNFE'
 UNION ALL
@@ -67,8 +67,8 @@ SELECT 'GEREMAILMDDEBUG', '= N',
 FROM DUAL LEFT JOIN TSIPAR t ON t.CHAVE = 'GEREMAILMDDEBUG'
 UNION ALL
 SELECT 'HABCOLTELPRO', '= N',
-       COALESCE(TO_CHAR(t.LOGICO), 'não definido (sem padrão conhecido)'),
-       CASE WHEN t.LOGICO IS NULL THEN 'indefinido'
+       COALESCE(TO_CHAR(t.LOGICO), '= S (Padrão)'),
+       CASE WHEN t.LOGICO IS NULL THEN 'alerta'
             WHEN t.LOGICO = 'N' THEN 'ok' ELSE 'alerta' END
 FROM DUAL LEFT JOIN TSIPAR t ON t.CHAVE = 'HABCOLTELPRO'
 UNION ALL

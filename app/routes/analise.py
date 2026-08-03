@@ -8,6 +8,7 @@ from app import db
 from app.checks import CHECKS
 from app.pdf_report import gerar_relatorio_pdf
 from app.session import InvalidSessionId, SessionNotFound, load_credentials
+from fastapi.encoders import jsonable_encoder
 
 router = APIRouter(prefix="/analise", tags=["analise"])
 
@@ -68,8 +69,8 @@ def executar_analise(session_id: str):
         except Exception as exc:
             resultados[f"{check.id}_erro"] = str(exc)
 
-    return JSONResponse(resultados)
-
+#    return JSONResponse(resultados)
+    return JSONResponse(content=jsonable_encoder(resultados))
 
 @router.post("/{session_id}/relatorio")
 def gerar_relatorio(session_id: str, resultados: dict = Body(...)):
