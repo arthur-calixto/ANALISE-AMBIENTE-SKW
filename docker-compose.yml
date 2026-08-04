@@ -1,6 +1,7 @@
 services:
   analise-ambiente:
     build: .
+    image: analise-ambiente:latest
     container_name: analise-ambiente
     ports:
       - "8590:8590"

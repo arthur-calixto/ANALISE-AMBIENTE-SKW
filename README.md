@@ -1,16 +1,32 @@
 # Análise de Ambiente Sankhya
 
-MVP: dashboard web que executa queries de análise (locks + nível de
-personalização) contra o banco do cliente, a partir de uma sessão
-preparada pelo `server-tool.sh` num diretório compartilhado.
+Dashboard web que executa queries de análise (locks, nível de
+personalização, parâmetros, jobs com falha, eventos com erro etc.)
+contra o banco de clientes, além de um analisador do Monitor de
+Consulta/Processos do Sankhya (upload de zip).
 
 ## Fluxo
 
-1. `server-tool.sh` gera um `session_id` (UUID) e grava
-   `<SHARED_DIR>/<session_id>/credentials.json` com os dados de conexão.
-2. `server-tool.sh` retorna a URL: `<PUBLIC_BASE_URL>/analise/<session_id>`
-3. Usuário abre a URL, vê o dashboard, clica em "Executar Análise".
+1. As credenciais de cada cliente ficam em um arquivo
+   `<SHARED_DIR>/<NOME_CLIENTE>.json` (ex: `SomaForce.json`).
+2. A tela inicial (`/`) lista automaticamente os clientes encontrados
+   nesse diretório.
+3. Usuário clica no cliente, cai no dashboard, clica em "Executar Análise".
 4. A aplicação roda as queries em `app/db/queries/` e mostra o resultado.
+5. Opcionalmente, baixa um relatório em PDF do resultado.
+
+### Formato do `<NOME_CLIENTE>.json`
+
+```json
+{
+  "db_type": "oracle",
+  "host": "...",
+  "port": 1521,
+  "service_name": "...",
+  "user": "...",
+  "password": "..."
+}
+```
 
 ## Rodando local (sem Docker, pra desenvolvimento rápido)
 
@@ -23,8 +39,8 @@ cp .env.example .env
 uvicorn app.main:app --reload
 ```
 
-Acesse: `http://localhost:8000/analise/exemplo-sessao`
-(usa o `credentials.json` de exemplo em `data/exemplo-sessao/`)
+Crie `data/exemplo-sessao.json` com as credenciais de um banco de teste
+e acesse `http://localhost:8000/` — o cliente deve aparecer listado.
 
 ## Rodando com Docker
 
@@ -34,7 +50,7 @@ docker compose up --build
 ```
 
 Ajuste o caminho do volume em `docker-compose.yml` (`/repositorio-compartilhado`)
-para o diretório real onde o `server-tool.sh` escreve as sessões.
+para o diretório real onde ficam os arquivos `<NOME_CLIENTE>.json`.
 
 ## Adicionando uma nova query/análise
 
@@ -47,18 +63,16 @@ nova análise:
    um `titulo` e o tipo de exibição:
    - `Exibicao.TABELA` — qualquer resultado, mostrado como tabela genérica.
    - `Exibicao.CARDS` — query deve retornar colunas `PARAMETRO`, `ESPERADO`,
-     `ATUAL`; cada linha vira um card verde (bate) ou vermelho (diverge).
+     `ATUAL`, `STATUS` (`ok`/`alerta`/`indefinido`).
+   - `Exibicao.CONTAGEM` — query deve retornar colunas `TITULO`,
+     `CONTAGEM`, `DETALHE`, opcionalmente `STATUS`.
 
 Não precisa mexer em rota nem template — o dashboard já itera sobre
 `CHECKS` sozinho.
 
 ## Pendências conhecidas (próximos passos)
 
-- [ ] Colar as queries reais de `NIVEL_PERSONALIZACAO` e `parametros`
-      (hoje são placeholders) em `app/db/queries/`.
-- [ ] Definir se o `credentials.json` deve ser removido/expirado após uso,
-      e se o volume deve ser montado `ro` ou `rw` para permitir isso.
-- [ ] Autenticação da URL da sessão (hoje qualquer um com o link acessa —
-      avaliar token de uso único ou expiração por tempo).
-- [ ] Coleta de JStack/JFR (fase 2 — feita pelo `server-tool.sh` no
-      momento da geração da sessão, conforme decidido).
+- [ ] Autenticação/controle de acesso na tela inicial e nas rotas de
+      análise (hoje qualquer um com acesso à rede vê a lista de
+      clientes e pode rodar queries).
+- [ ] Coleta de JStack/JFR (fase 2).

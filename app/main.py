@@ -6,6 +6,7 @@ from fastapi.templating import Jinja2Templates
 
 from app.config import settings
 from app.routes import analise, monitor
+from app.session import listar_clientes
 
 app = FastAPI(title="Análise de Ambiente Sankhya")
 app.mount("/static", StaticFiles(directory="app/static"), name="static")
@@ -17,7 +18,9 @@ templates = Jinja2Templates(directory="app/templates")
 
 @app.get("/", response_class=HTMLResponse)
 def tela_inicial(request: Request):
-    return templates.TemplateResponse("index.html", {"request": request})
+    return templates.TemplateResponse(
+        "index.html", {"request": request, "clientes": listar_clientes()}
+    )
 
 
 @app.get("/health")

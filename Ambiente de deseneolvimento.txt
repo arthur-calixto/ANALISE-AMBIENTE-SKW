@@ -1,0 +1,14 @@
+#Ambiente de deseneolvimento
+
+docker build -t analise-ambiente:latest .
+
+docker save -o analise.tar analise-ambiente:latest
+
+#Ambiente de produção
+
+
+docker rmi analise-ambiente:latest   
+
+docker load < analise.tar
+
+docker compose up -d

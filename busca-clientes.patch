@@ -1,0 +1,164 @@
+diff --git a/app/templates/index.html b/app/templates/index.html
+index 41ec130..d2e3059 100644
+--- a/app/templates/index.html
++++ b/app/templates/index.html
+@@ -6,15 +6,40 @@
+     <title>Análise de Ambiente Sankhya</title>
+     <link rel="stylesheet" href="/static/styles.css">
+     <style>
+-        .lista-clientes { margin-top: 1.1rem; display: flex; flex-direction: column; gap: 0.4rem; }
++        .tile.tile-analise { cursor: default; }
++        .tile.tile-analise:hover { transform: none; }
++
++        .busca-clientes { margin-top: 2rem; }
++        .busca-clientes.oculto { display: none; }
++
++        .campo-busca { position: relative; max-width: 420px; }
++        .campo-busca input {
++            width: 100%; padding: 0.65rem 0.9rem 0.65rem 2.2rem;
++            font-family: var(--font-mono); font-size: 0.85rem;
++        }
++        .campo-busca svg {
++            position: absolute; left: 0.7rem; top: 50%; transform: translateY(-50%);
++            width: 15px; height: 15px; color: var(--text-faint); pointer-events: none;
++        }
++        .contador-clientes { font-size: 0.75rem; color: var(--text-faint); margin-top: 0.5rem;
++                              font-family: var(--font-mono); }
++
++        .grid-clientes {
++            display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
++            gap: 0.5rem; margin-top: 1rem; max-height: 420px; overflow-y: auto; padding-right: 0.3rem;
++        }
+         .cliente-item {
+             display: flex; align-items: center; justify-content: space-between;
+-            background: var(--bg-elevated); border: 1px solid var(--border-soft);
+-            border-radius: var(--radius); padding: 0.55rem 0.85rem;
++            background: var(--surface); border: 1px solid var(--border-soft);
++            border-radius: var(--radius); padding: 0.6rem 0.85rem;
+             font-family: var(--font-mono); font-size: 0.8rem; color: var(--text);
+         }
+-        .cliente-item:hover { border-color: var(--accent); color: var(--text); }
+-        .cliente-item .seta { color: var(--accent); }
++        .cliente-item:hover { border-color: var(--accent); color: var(--text); background: var(--surface-hover); }
++        .cliente-item .seta { color: var(--accent); flex-shrink: 0; margin-left: 0.5rem; }
++        .cliente-item .nome { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
++        .cliente-item mark { background: var(--accent-dim); color: var(--accent); border-radius: 2px; }
++
++        .sem-resultado { font-size: 0.8rem; color: var(--text-faint); margin-top: 1rem; }
+         .sem-clientes { font-size: 0.8rem; color: var(--text-faint); margin-top: 1rem; line-height: 1.6; }
+         .sem-clientes code { background: var(--bg-elevated); padding: 0.1rem 0.4rem; border-radius: 4px; }
+     </style>
+@@ -31,7 +56,7 @@
+         <div class="meta">Ferramentas de diagnóstico de ambientes Sankhya — banco de dados, parâmetros e monitor de consulta.</div>
+ 
+         <div class="tiles">
+-            <div class="tile" id="tile-analise">
++            <div class="tile tile-analise">
+                 <svg class="icone" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+                     <ellipse cx="12" cy="5" rx="8" ry="3"></ellipse>
+                     <path d="M4 5v6c0 1.66 3.58 3 8 3s8-1.34 8-3V5"></path>
+@@ -39,20 +64,8 @@
+                 </svg>
+                 <div class="titulo">Análise Geral do Ambiente</div>
+                 <div class="descricao">Locks, nível de personalização, parâmetros, jobs com falha e eventos com erro — direto no banco do cliente.</div>
+-
+                 {% if clientes %}
+-                <div class="lista-clientes">
+-                    {% for cliente in clientes %}
+-                    <a class="cliente-item" href="/analise/{{ cliente }}">
+-                        {{ cliente }} <span class="seta">→</span>
+-                    </a>
+-                    {% endfor %}
+-                </div>
+-                {% else %}
+-                <div class="sem-clientes">
+-                    Nenhum cliente encontrado. Adicione um arquivo <code>NOME_CLIENTE.json</code>
+-                    no diretório compartilhado (<code>SHARED_DIR</code>) com as credenciais de conexão.
+-                </div>
++                <div class="ir">↓ selecione o cliente abaixo</div>
+                 {% endif %}
+             </div>
+ 
+@@ -65,6 +78,70 @@
+                 <div class="ir">Abrir →</div>
+             </a>
+         </div>
++
++        {% if clientes %}
++        <section class="busca-clientes">
++            <h2>Selecionar cliente</h2>
++            <div class="campo-busca">
++                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
++                    <circle cx="11" cy="11" r="7"></circle>
++                    <path d="M21 21l-4.3-4.3"></path>
++                </svg>
++                <input type="text" id="busca-cliente" placeholder="buscar cliente..." autocomplete="off" autofocus>
++            </div>
++            <div class="contador-clientes" id="contador-clientes"></div>
++            <div class="grid-clientes" id="grid-clientes">
++                {% for cliente in clientes %}
++                <a class="cliente-item" href="/analise/{{ cliente }}" data-nome="{{ cliente|lower }}">
++                    <span class="nome">{{ cliente }}</span> <span class="seta">→</span>
++                </a>
++                {% endfor %}
++            </div>
++            <div class="sem-resultado" id="sem-resultado" style="display:none;">Nenhum cliente encontrado.</div>
++        </section>
++        {% else %}
++        <div class="sem-clientes">
++            Nenhum cliente encontrado. Adicione um arquivo <code>NOME_CLIENTE.json</code>
++            no diretório compartilhado (<code>SHARED_DIR</code>) com as credenciais de conexão.
++        </div>
++        {% endif %}
+     </main>
++
++    <script>
++        const input = document.getElementById("busca-cliente");
++        const itens = Array.from(document.querySelectorAll(".cliente-item"));
++        const contador = document.getElementById("contador-clientes");
++        const semResultado = document.getElementById("sem-resultado");
++
++        function atualizarContador(visiveis) {
++            contador.textContent = `${visiveis} de ${itens.length} clientes`;
++        }
++
++        if (input) {
++            atualizarContador(itens.length);
++
++            input.addEventListener("input", () => {
++                const termo = input.value.trim().toLowerCase();
++                let visiveis = 0;
++
++                itens.forEach(item => {
++                    const nome = item.dataset.nome;
++                    const bate = nome.includes(termo);
++                    item.style.display = bate ? "" : "none";
++                    if (bate) visiveis++;
++                });
++
++                atualizarContador(visiveis);
++                semResultado.style.display = visiveis === 0 ? "block" : "none";
++            });
++
++            input.addEventListener("keydown", (ev) => {
++                if (ev.key === "Enter") {
++                    const primeiroVisivel = itens.find(i => i.style.display !== "none");
++                    if (primeiroVisivel) window.location.href = primeiroVisivel.getAttribute("href");
++                }
++            });
++        }
++    </script>
+ </body>
+ </html>
+diff --git a/docker-compose.yml b/docker-compose.yml
+index 140d3e8..0738fe7 100644
+--- a/docker-compose.yml
++++ b/docker-compose.yml
+@@ -1,6 +1,7 @@
+ services:
+   analise-ambiente:
+     build: .
++    image: analise-ambiente:latest
+     container_name: analise-ambiente
+     ports:
+       - "8590:8590"

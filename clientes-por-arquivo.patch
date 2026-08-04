@@ -1,0 +1,283 @@
+diff --git a/.env.example b/.env.example
+index fd6ad4d..3cd7567 100644
+--- a/.env.example
++++ b/.env.example
+@@ -1,6 +1,8 @@
+-# Diretório compartilhado onde o server-tool.sh grava as sessões
+-# (montado como volume dentro do container)
+-SHARED_DIR=/app/data
++# Diretório com os arquivos <NOME_CLIENTE>.json (credenciais de conexão).
++# Local (venv, fora do Docker): ./data
++# Dentro do container Docker: /app/data (já forçado via docker-compose.yml,
++# não precisa mudar esse valor pra rodar com Docker)
++SHARED_DIR=./data
+ 
+ # Host/porta em que a aplicação web sobe
+ APP_HOST=0.0.0.0
+diff --git a/README.md b/README.md
+index 40cac7f..4d4e629 100644
+--- a/README.md
++++ b/README.md
+@@ -1,16 +1,32 @@
+ # Análise de Ambiente Sankhya
+ 
+-MVP: dashboard web que executa queries de análise (locks + nível de
+-personalização) contra o banco do cliente, a partir de uma sessão
+-preparada pelo `server-tool.sh` num diretório compartilhado.
++Dashboard web que executa queries de análise (locks, nível de
++personalização, parâmetros, jobs com falha, eventos com erro etc.)
++contra o banco de clientes, além de um analisador do Monitor de
++Consulta/Processos do Sankhya (upload de zip).
+ 
+ ## Fluxo
+ 
+-1. `server-tool.sh` gera um `session_id` (UUID) e grava
+-   `<SHARED_DIR>/<session_id>/credentials.json` com os dados de conexão.
+-2. `server-tool.sh` retorna a URL: `<PUBLIC_BASE_URL>/analise/<session_id>`
+-3. Usuário abre a URL, vê o dashboard, clica em "Executar Análise".
++1. As credenciais de cada cliente ficam em um arquivo
++   `<SHARED_DIR>/<NOME_CLIENTE>.json` (ex: `SomaForce.json`).
++2. A tela inicial (`/`) lista automaticamente os clientes encontrados
++   nesse diretório.
++3. Usuário clica no cliente, cai no dashboard, clica em "Executar Análise".
+ 4. A aplicação roda as queries em `app/db/queries/` e mostra o resultado.
++5. Opcionalmente, baixa um relatório em PDF do resultado.
++
++### Formato do `<NOME_CLIENTE>.json`
++
++```json
++{
++  "db_type": "oracle",
++  "host": "...",
++  "port": 1521,
++  "service_name": "...",
++  "user": "...",
++  "password": "..."
++}
++```
+ 
+ ## Rodando local (sem Docker, pra desenvolvimento rápido)
+ 
+@@ -23,8 +39,8 @@ cp .env.example .env
+ uvicorn app.main:app --reload
+ ```
+ 
+-Acesse: `http://localhost:8000/analise/exemplo-sessao`
+-(usa o `credentials.json` de exemplo em `data/exemplo-sessao/`)
++Crie `data/exemplo-sessao.json` com as credenciais de um banco de teste
++e acesse `http://localhost:8000/` — o cliente deve aparecer listado.
+ 
+ ## Rodando com Docker
+ 
+@@ -34,7 +50,7 @@ docker compose up --build
+ ```
+ 
+ Ajuste o caminho do volume em `docker-compose.yml` (`/repositorio-compartilhado`)
+-para o diretório real onde o `server-tool.sh` escreve as sessões.
++para o diretório real onde ficam os arquivos `<NOME_CLIENTE>.json`.
+ 
+ ## Adicionando uma nova query/análise
+ 
+@@ -47,18 +63,16 @@ nova análise:
+    um `titulo` e o tipo de exibição:
+    - `Exibicao.TABELA` — qualquer resultado, mostrado como tabela genérica.
+    - `Exibicao.CARDS` — query deve retornar colunas `PARAMETRO`, `ESPERADO`,
+-     `ATUAL`; cada linha vira um card verde (bate) ou vermelho (diverge).
++     `ATUAL`, `STATUS` (`ok`/`alerta`/`indefinido`).
++   - `Exibicao.CONTAGEM` — query deve retornar colunas `TITULO`,
++     `CONTAGEM`, `DETALHE`, opcionalmente `STATUS`.
+ 
+ Não precisa mexer em rota nem template — o dashboard já itera sobre
+ `CHECKS` sozinho.
+ 
+ ## Pendências conhecidas (próximos passos)
+ 
+-- [ ] Colar as queries reais de `NIVEL_PERSONALIZACAO` e `parametros`
+-      (hoje são placeholders) em `app/db/queries/`.
+-- [ ] Definir se o `credentials.json` deve ser removido/expirado após uso,
+-      e se o volume deve ser montado `ro` ou `rw` para permitir isso.
+-- [ ] Autenticação da URL da sessão (hoje qualquer um com o link acessa —
+-      avaliar token de uso único ou expiração por tempo).
+-- [ ] Coleta de JStack/JFR (fase 2 — feita pelo `server-tool.sh` no
+-      momento da geração da sessão, conforme decidido).
++- [ ] Autenticação/controle de acesso na tela inicial e nas rotas de
++      análise (hoje qualquer um com acesso à rede vê a lista de
++      clientes e pode rodar queries).
++- [ ] Coleta de JStack/JFR (fase 2).
+diff --git a/app/main.py b/app/main.py
+index 47ceda8..bc7fd33 100644
+--- a/app/main.py
++++ b/app/main.py
+@@ -6,6 +6,7 @@ from fastapi.templating import Jinja2Templates
+ 
+ from app.config import settings
+ from app.routes import analise, monitor
++from app.session import listar_clientes
+ 
+ app = FastAPI(title="Análise de Ambiente Sankhya")
+ app.mount("/static", StaticFiles(directory="app/static"), name="static")
+@@ -17,7 +18,9 @@ templates = Jinja2Templates(directory="app/templates")
+ 
+ @app.get("/", response_class=HTMLResponse)
+ def tela_inicial(request: Request):
+-    return templates.TemplateResponse("index.html", {"request": request})
++    return templates.TemplateResponse(
++        "index.html", {"request": request, "clientes": listar_clientes()}
++    )
+ 
+ 
+ @app.get("/health")
+diff --git a/app/session.py b/app/session.py
+index dbebd00..43ec902 100644
+--- a/app/session.py
++++ b/app/session.py
+@@ -4,9 +4,11 @@ from pathlib import Path
+ 
+ from app.config import settings
+ 
+-# session_id deve ser um UUID (ou similar) — validação evita path traversal
+-# vindo da URL (ex: "../../etc/passwd").
+-_SESSION_ID_RE = re.compile(r"^[a-zA-Z0-9_-]{8,64}$")
++# nome do cliente vira o nome do arquivo (<NOME_CLIENTE>.json) — permite
++# letras, números, espaço, hífen, underscore e ponto (nomes de cliente
++# reais costumam ter espaço, ex: "Soma Force"), mas bloqueia ".." e
++# barras pra evitar path traversal vindo da URL.
++_CLIENTE_ID_RE = re.compile(r"^[\w .-]{1,80}$")
+ 
+ 
+ class SessionNotFound(Exception):
+@@ -17,38 +19,49 @@ class InvalidSessionId(Exception):
+     pass
+ 
+ 
+-def _validate_session_id(session_id: str) -> None:
+-    if not _SESSION_ID_RE.match(session_id):
+-        raise InvalidSessionId(f"session_id inválido: {session_id!r}")
++def _validate_cliente_id(cliente_id: str) -> None:
++    if not _CLIENTE_ID_RE.match(cliente_id) or ".." in cliente_id:
++        raise InvalidSessionId(f"identificador de cliente inválido: {cliente_id!r}")
+ 
+ 
+-def get_session_dir(session_id: str) -> Path:
+-    _validate_session_id(session_id)
+-    session_dir = Path(settings.shared_dir) / session_id
+-
+-    # Garante que o path resolvido continua dentro do shared_dir
+-    # (defesa extra, além da regex acima).
++def _get_credentials_path(cliente_id: str) -> Path:
++    _validate_cliente_id(cliente_id)
+     shared_root = Path(settings.shared_dir).resolve()
+-    resolved = session_dir.resolve()
+-    if shared_root not in resolved.parents and resolved != shared_root:
+-        raise InvalidSessionId(f"session_id fora do diretório esperado: {session_id!r}")
++    caminho = shared_root / f"{cliente_id}.json"
++
++    # defesa extra além da regex: garante que o caminho resolvido
++    # continua dentro do shared_dir
++    if shared_root not in caminho.resolve().parents:
++        raise InvalidSessionId(f"identificador fora do diretório esperado: {cliente_id!r}")
++
++    return caminho
++
++
++def listar_clientes() -> list[str]:
++    """
++    Lista os clientes disponíveis a partir dos arquivos <NOME_CLIENTE>.json
++    presentes no diretório compartilhado (SHARED_DIR).
++    """
++    shared_root = Path(settings.shared_dir)
++    if not shared_root.is_dir():
++        return []
+ 
+-    return session_dir
++    return sorted(p.stem for p in shared_root.glob("*.json"))
+ 
+ 
+-def load_credentials(session_id: str) -> dict:
+-    session_dir = get_session_dir(session_id)
+-    credentials_path = session_dir / "credentials.json"
++def load_credentials(cliente_id: str) -> dict:
++    credentials_path = _get_credentials_path(cliente_id)
+ 
+     if not credentials_path.exists():
+-        raise SessionNotFound(f"Sessão não encontrada: {session_id!r}")
++        raise SessionNotFound(f"Cliente não encontrado: {cliente_id!r}")
+ 
+     with open(credentials_path, "r", encoding="utf-8") as f:
+         data = json.load(f)
+ 
+-    required_fields = {"cliente_id", "db_type"}
++    required_fields = {"db_type"}
+     missing = required_fields - data.keys()
+     if missing:
+-        raise ValueError(f"credentials.json incompleto, faltando: {missing}")
++        raise ValueError(f"{cliente_id}.json incompleto, faltando: {missing}")
+ 
++    data.setdefault("cliente_id", cliente_id)
+     return data
+diff --git a/app/templates/index.html b/app/templates/index.html
+index 097e61d..41ec130 100644
+--- a/app/templates/index.html
++++ b/app/templates/index.html
+@@ -5,6 +5,19 @@
+     <meta name="viewport" content="width=device-width, initial-scale=1">
+     <title>Análise de Ambiente Sankhya</title>
+     <link rel="stylesheet" href="/static/styles.css">
++    <style>
++        .lista-clientes { margin-top: 1.1rem; display: flex; flex-direction: column; gap: 0.4rem; }
++        .cliente-item {
++            display: flex; align-items: center; justify-content: space-between;
++            background: var(--bg-elevated); border: 1px solid var(--border-soft);
++            border-radius: var(--radius); padding: 0.55rem 0.85rem;
++            font-family: var(--font-mono); font-size: 0.8rem; color: var(--text);
++        }
++        .cliente-item:hover { border-color: var(--accent); color: var(--text); }
++        .cliente-item .seta { color: var(--accent); }
++        .sem-clientes { font-size: 0.8rem; color: var(--text-faint); margin-top: 1rem; line-height: 1.6; }
++        .sem-clientes code { background: var(--bg-elevated); padding: 0.1rem 0.4rem; border-radius: 4px; }
++    </style>
+ </head>
+ <body>
+     <div class="topbar">
+@@ -26,12 +39,21 @@
+                 </svg>
+                 <div class="titulo">Análise Geral do Ambiente</div>
+                 <div class="descricao">Locks, nível de personalização, parâmetros, jobs com falha e eventos com erro — direto no banco do cliente.</div>
+-                <div class="ir">→ requer link de sessão do server-tool</div>
+ 
+-                <form class="form-sessao" onsubmit="return abrirSessao(event)">
+-                    <input type="text" id="input-session-id" placeholder="colar session_id aqui" autocomplete="off">
+-                    <button type="submit" class="btn-secundario">Abrir</button>
+-                </form>
++                {% if clientes %}
++                <div class="lista-clientes">
++                    {% for cliente in clientes %}
++                    <a class="cliente-item" href="/analise/{{ cliente }}">
++                        {{ cliente }} <span class="seta">→</span>
++                    </a>
++                    {% endfor %}
++                </div>
++                {% else %}
++                <div class="sem-clientes">
++                    Nenhum cliente encontrado. Adicione um arquivo <code>NOME_CLIENTE.json</code>
++                    no diretório compartilhado (<code>SHARED_DIR</code>) com as credenciais de conexão.
++                </div>
++                {% endif %}
+             </div>
+ 
+             <a class="tile" href="/monitor">
+@@ -44,14 +66,5 @@
+             </a>
+         </div>
+     </main>
+-
+-    <script>
+-        function abrirSessao(ev) {
+-            ev.preventDefault();
+-            const id = document.getElementById("input-session-id").value.trim();
+-            if (id) window.location.href = `/analise/${id}`;
+-            return false;
+-        }
+-    </script>
+ </body>
+ </html>

@@ -4,9 +4,11 @@ from pathlib import Path
 
 from app.config import settings
 
-# session_id deve ser um UUID (ou similar) — validação evita path traversal
-# vindo da URL (ex: "../../etc/passwd").
-_SESSION_ID_RE = re.compile(r"^[a-zA-Z0-9_-]{8,64}$")
+# nome do cliente vira o nome do arquivo (<NOME_CLIENTE>.json) — permite
+# letras, números, espaço, hífen, underscore e ponto (nomes de cliente
+# reais costumam ter espaço, ex: "Soma Force"), mas bloqueia ".." e
+# barras pra evitar path traversal vindo da URL.
+_CLIENTE_ID_RE = re.compile(r"^[\w .-]{1,80}$")
 
 
 class SessionNotFound(Exception):
@@ -17,38 +19,49 @@ class InvalidSessionId(Exception):
     pass
 
 
-def _validate_session_id(session_id: str) -> None:
-    if not _SESSION_ID_RE.match(session_id):
-        raise InvalidSessionId(f"session_id inválido: {session_id!r}")
+def _validate_cliente_id(cliente_id: str) -> None:
+    if not _CLIENTE_ID_RE.match(cliente_id) or ".." in cliente_id:
+        raise InvalidSessionId(f"identificador de cliente inválido: {cliente_id!r}")
 
 
-def get_session_dir(session_id: str) -> Path:
-    _validate_session_id(session_id)
-    session_dir = Path(settings.shared_dir) / session_id
-
-    # Garante que o path resolvido continua dentro do shared_dir
-    # (defesa extra, além da regex acima).
+def _get_credentials_path(cliente_id: str) -> Path:
+    _validate_cliente_id(cliente_id)
     shared_root = Path(settings.shared_dir).resolve()
-    resolved = session_dir.resolve()
-    if shared_root not in resolved.parents and resolved != shared_root:
-        raise InvalidSessionId(f"session_id fora do diretório esperado: {session_id!r}")
+    caminho = shared_root / f"{cliente_id}.json"
 
-    return session_dir
+    # defesa extra além da regex: garante que o caminho resolvido
+    # continua dentro do shared_dir
+    if shared_root not in caminho.resolve().parents:
+        raise InvalidSessionId(f"identificador fora do diretório esperado: {cliente_id!r}")
+
+    return caminho
 
 
-def load_credentials(session_id: str) -> dict:
-    session_dir = get_session_dir(session_id)
-    credentials_path = session_dir / "credentials.json"
+def listar_clientes() -> list[str]:
+    """
+    Lista os clientes disponíveis a partir dos arquivos <NOME_CLIENTE>.json
+    presentes no diretório compartilhado (SHARED_DIR).
+    """
+    shared_root = Path(settings.shared_dir)
+    if not shared_root.is_dir():
+        return []
+
+    return sorted(p.stem for p in shared_root.glob("*.json"))
+
+
+def load_credentials(cliente_id: str) -> dict:
+    credentials_path = _get_credentials_path(cliente_id)
 
     if not credentials_path.exists():
-        raise SessionNotFound(f"Sessão não encontrada: {session_id!r}")
+        raise SessionNotFound(f"Cliente não encontrado: {cliente_id!r}")
 
     with open(credentials_path, "r", encoding="utf-8") as f:
         data = json.load(f)
 
-    required_fields = {"cliente_id", "db_type"}
+    required_fields = {"db_type"}
     missing = required_fields - data.keys()
     if missing:
-        raise ValueError(f"credentials.json incompleto, faltando: {missing}")
+        raise ValueError(f"{cliente_id}.json incompleto, faltando: {missing}")
 
+    data.setdefault("cliente_id", cliente_id)
     return data
