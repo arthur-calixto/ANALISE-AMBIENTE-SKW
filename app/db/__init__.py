@@ -11,4 +11,4 @@ def run_query(credentials: dict, sql: str, params=None) -> list[dict]:
     driver = _DRIVERS.get(db_type)
     if driver is None:
         raise ValueError(f"db_type não suportado: {db_type!r}")
-    return driver.run_query(credentials, sql, params or {})
+    return driver.run_query(credentials, sql, params)

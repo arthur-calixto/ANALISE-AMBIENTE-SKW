@@ -69,17 +69,56 @@
         function renderContagem(linhas) {
             if (!linhas || linhas.length === 0) return "<p>Nenhum resultado.</p>";
             let html = '<div class="contagem-grid">';
-            linhas.forEach(row => {
+            linhas.forEach((row, idx) => {
                 const status = String(row.STATUS || "").toLowerCase() === "alerta" ? "alerta" : "";
+                const detalhe = row.DETALHE ?? "";
+
+                // Convenção: se o DETALHE tem " · ", a primeira parte é um
+                // resumo (ex: "média: 47.5 logins/dia") e o resto é uma
+                // lista "item, item, item" que vira pills. Sem " · ",
+                // trata o DETALHE inteiro como a lista.
+                const partes = detalhe.split(" · ");
+                const temResumo = partes.length > 1;
+                const resumo = temResumo ? partes[0] : "";
+                const listaBruta = temResumo ? partes.slice(1).join(" · ") : detalhe;
+                const itens = listaBruta ? listaBruta.split(", ").filter(Boolean) : [];
+
+                let pillsHtml = "";
+                if (itens.length) {
+                    const LIMITE = 5;
+                    const visiveis = itens.slice(0, LIMITE);
+                    const ocultos = itens.slice(LIMITE);
+                    const idPills = `pills-${idx}`;
+                    pillsHtml = `<div class="pill-list" id="${idPills}">` +
+                        visiveis.map(i => `<span class="pill">${i}</span>`).join("") +
+                        (ocultos.length
+                            ? `<span class="pill pill-mais" onclick="expandirPills('${idPills}', ${JSON.stringify(ocultos).replace(/"/g, '&quot;')})">+${ocultos.length} mais</span>`
+                            : "") +
+                        `</div>`;
+                }
+
                 html += `
                     <div class="contagem-card ${status}">
                         <div class="titulo">${row.TITULO ?? ""}</div>
                         <div class="numero">${row.CONTAGEM ?? ""}</div>
-                        <div class="detalhe">${row.DETALHE ?? ""}</div>
+                        ${resumo ? `<div class="resumo-linha">${resumo}</div>` : ""}
+                        ${pillsHtml}
                     </div>`;
             });
             html += "</div>";
             return html;
+        }
+
+        function expandirPills(idPills, ocultos) {
+            const container = document.getElementById(idPills);
+            const botaoMais = container.querySelector(".pill-mais");
+            if (botaoMais) botaoMais.remove();
+            ocultos.forEach(i => {
+                const span = document.createElement("span");
+                span.className = "pill";
+                span.textContent = i;
+                container.appendChild(span);
+            });
         }
 
         function contarStatus(data) {

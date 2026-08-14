@@ -1,7 +1,5 @@
 #Ambiente de deseneolvimento
-
-docker build -t analise-ambiente:latest .
-
+docker compose build
 docker save -o analise.tar analise-ambiente:latest
 
 #Ambiente de produção

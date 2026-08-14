@@ -17,9 +17,9 @@ def get_connection(credentials: dict):
     return pyodbc.connect(conn_str)
 
 
-def run_query(credentials: dict, sql: str, params: tuple = ()) -> list[dict]:
+def run_query(credentials: dict, sql: str, params: tuple | None = None) -> list[dict]:
     with get_connection(credentials) as conn:
         with conn.cursor() as cur:
-            cur.execute(sql, params)
+            cur.execute(sql, params or ())
             columns = [col[0] for col in cur.description]
             return [dict(zip(columns, row)) for row in cur.fetchall()]

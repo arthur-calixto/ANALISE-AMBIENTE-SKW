@@ -1,8 +1,5 @@
 /* =====================================================================================
    INDICADOR DE NÍVEL DE PERSONALIZAÇÃO DO AMBIENTE SANKHYA — VERSÃO ORACLE
-   Saída pensada para leitura direta pelo cliente final:
-   - cada recurso mostra uma classificação (BAIXO/MÉDIO/ALTO), não um cálculo bruto
-   - seção final de ALERTA com o achado em texto, só pros pontos de atenção reais
    ===================================================================================== */
 
 WITH CONTAGEM AS (
@@ -42,13 +39,7 @@ PONTUACAO AS (
             WHEN QTD <= 10 THEN 3
             WHEN QTD <= 40 THEN 6
             ELSE 10
-        END AS NOTA_BASE,
-        CASE
-            WHEN QTD = 0   THEN 'NENHUM'
-            WHEN QTD <= 10 THEN 'BAIXO'
-            WHEN QTD <= 40 THEN 'MÉDIO'
-            ELSE 'ALTO'
-        END AS NIVEL
+        END AS NOTA_BASE
     FROM CONTAGEM
 ),
 
@@ -61,6 +52,7 @@ TRIGGERS_CONTAGEM AS (
       AND TABLE_OWNER = USER
     GROUP BY TABLE_NAME
 ),
+
 
 TRIGGERS_BASE AS (
     SELECT F.TABELA, NVL(C.QTD_TRIGGER, 0) AS QTD_TRIGGER, F.PADRAO, F.MEDIO_LIMITE
@@ -83,10 +75,10 @@ TRIGGERS_PONTUACAO AS (
             ELSE 10
         END AS NOTA_BASE,
         CASE
-            WHEN QTD_TRIGGER <= PADRAO       THEN 'BAIXO'
+            WHEN QTD_TRIGGER <= PADRAO       THEN 'PADRÃO'
             WHEN QTD_TRIGGER <= MEDIO_LIMITE THEN 'MÉDIO'
             ELSE 'ALTO'
-        END AS NIVEL
+        END AS NIVEL_TABELA
     FROM TRIGGERS_BASE
 ),
 
@@ -96,7 +88,7 @@ TOTAIS AS (
         (SELECT SUM(NOTA_BASE * PESO) FROM TRIGGERS_PONTUACAO)            AS SCORE_TOTAL,
         (SELECT SUM(PESO) * 10 FROM PONTUACAO) +
         (SELECT SUM(PESO) * 10 FROM TRIGGERS_PONTUACAO)                   AS SCORE_MAXIMO,
-        (SELECT MAX(CASE NIVEL WHEN 'ALTO' THEN 3 WHEN 'MÉDIO' THEN 2 ELSE 1 END)
+        (SELECT MAX(CASE NIVEL_TABELA WHEN 'ALTO' THEN 3 WHEN 'MÉDIO' THEN 2 ELSE 1 END)
             FROM TRIGGERS_PONTUACAO)                                      AS PIOR_CASO_TRIGGER
     FROM DUAL
 )
@@ -104,9 +96,10 @@ TOTAIS AS (
 /* ---------------------- DETALHE POR RECURSO ---------------------- */
 SELECT
     1 AS ORDEM, 'DETALHE' AS TIPO_LINHA, RECURSO,
-    CAST(QTD AS VARCHAR2(20)) AS QUANTIDADE,
-    NIVEL,
-    NULL AS STATUS
+    CAST(QTD AS VARCHAR2(20)) AS QTD,
+    CAST(PESO AS VARCHAR2(20)) AS PESO,
+    CAST(NOTA_BASE AS VARCHAR2(20)) AS NOTA_BASE,
+    CAST(NOTA_BASE * PESO AS VARCHAR2(20)) AS NIVEL_PERSONALIZACAO
 FROM PONTUACAO
 
 UNION ALL
@@ -115,51 +108,28 @@ UNION ALL
 SELECT
     2 AS ORDEM, 'TRIGGER' AS TIPO_LINHA,
     'Triggers - ' || TABELA AS RECURSO,
-    CAST(QTD_TRIGGER AS VARCHAR2(20)) AS QUANTIDADE,
-    NIVEL,
-    NULL AS STATUS
+    CAST(QTD_TRIGGER AS VARCHAR2(20)) AS QTD,
+    CAST(PESO AS VARCHAR2(20)) AS PESO,
+    NIVEL_TABELA AS NOTA_BASE,
+    CAST(NOTA_BASE * PESO AS VARCHAR2(20)) AS NIVEL_PERSONALIZACAO
 FROM TRIGGERS_PONTUACAO
-
-UNION ALL
-
-/* ---------------------- ALERTAS (só aparecem se houver algo a reportar) ---------------------- */
-SELECT
-    3 AS ORDEM, 'ALERTA' AS TIPO_LINHA,
-    'Volume de triggers acima do esperado na tabela ' || TP.TABELA ||
-        ' (' || TP.QTD_TRIGGER || ' triggers encontradas, padrão é até ' || TB.PADRAO || ')' AS RECURSO,
-    CAST(TP.QTD_TRIGGER AS VARCHAR2(20)) AS QUANTIDADE,
-    TP.NIVEL,
-    'alerta' AS STATUS
-FROM TRIGGERS_PONTUACAO TP
-JOIN TRIGGERS_BASE TB ON TB.TABELA = TP.TABELA
-WHERE TP.NIVEL IN ('MÉDIO', 'ALTO')
-
-UNION ALL
-
-SELECT
-    3 AS ORDEM, 'ALERTA' AS TIPO_LINHA,
-    'Alto volume de personalização em ' || RECURSO || ' (' || QTD || ' itens)' AS RECURSO,
-    CAST(QTD AS VARCHAR2(20)) AS QUANTIDADE,
-    NIVEL,
-    'alerta' AS STATUS
-FROM PONTUACAO
-WHERE NIVEL = 'ALTO'
 
 UNION ALL
 
 /* ---------------------- LINHA CONSOLIDADA FINAL ---------------------- */
 SELECT
-    4 AS ORDEM, 'CONSOLIDADO' AS TIPO_LINHA,
+    3 AS ORDEM, 'CONSOLIDADO' AS TIPO_LINHA,
     'NÍVEL DE PERSONALIZAÇÃO DO AMBIENTE' AS RECURSO,
-    CAST(ROUND(SCORE_TOTAL * 100.0 / SCORE_MAXIMO, 0) AS VARCHAR2(20)) || '%' AS QUANTIDADE,
+    CAST(SCORE_TOTAL AS VARCHAR2(20)) AS QTD,
+    CAST(SCORE_MAXIMO AS VARCHAR2(20)) AS PESO,
+    CAST(ROUND(SCORE_TOTAL * 100.0 / SCORE_MAXIMO, 2) AS VARCHAR2(20)) AS NOTA_BASE,
     CASE
         WHEN PIOR_CASO_TRIGGER = 3 THEN 'ALTO'
         WHEN PIOR_CASO_TRIGGER = 2 AND (SCORE_TOTAL * 100.0 / SCORE_MAXIMO) < 65 THEN 'MÉDIO'
         WHEN (SCORE_TOTAL * 100.0 / SCORE_MAXIMO) < 30 THEN 'BAIXO'
         WHEN (SCORE_TOTAL * 100.0 / SCORE_MAXIMO) < 65 THEN 'MÉDIO'
         ELSE 'ALTO'
-    END AS NIVEL,
-    NULL AS STATUS
+    END AS NIVEL_PERSONALIZACAO
 FROM TOTAIS
 
-ORDER BY ORDEM, NIVEL DESC
+ORDER BY ORDEM, NIVEL_PERSONALIZACAO DESC
