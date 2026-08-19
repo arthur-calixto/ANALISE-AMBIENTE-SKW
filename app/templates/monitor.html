@@ -17,6 +17,13 @@
                 padding: 0.7rem 1.2rem; }
         .stat .numero { font-family: var(--font-mono); font-size: 1.3rem; font-weight: 700; color: var(--accent); }
         .stat .label { font-size: 0.72rem; color: var(--text-faint); text-transform: uppercase; letter-spacing: 0.05em; }
+
+        .btn-copiar {
+            background: transparent; border: 1px solid var(--border); color: var(--text-muted);
+            font-size: 0.7rem; padding: 0.3rem 0.6rem; white-space: nowrap;
+        }
+        .btn-copiar:hover { border-color: var(--accent); color: var(--accent); background: transparent; }
+        .btn-copiar.copiado { border-color: var(--ok); color: var(--ok); }
     </style>
 </head>
 <body>
@@ -46,18 +53,39 @@
 
         function renderTabelaQueries(linhas) {
             if (!linhas || linhas.length === 0) return "<p>Nenhum resultado.</p>";
-            let html = "<table><thead><tr><th>ID</th><th>Tempo (ms)</th><th>Application</th><th>ResourceID</th><th>SQL</th></tr></thead><tbody>";
-            linhas.forEach(row => {
+            let html = "<table><thead><tr><th>ID</th><th>Tempo (ms)</th><th>Application</th><th>ResourceID</th><th>SQL</th><th></th></tr></thead><tbody>";
+            linhas.forEach((row, idx) => {
                 html += `<tr>
                     <td>${row.ID}</td>
                     <td>${row.TEMPO_MS}</td>
                     <td>${row.APPLICATION}</td>
                     <td>${row.RESOURCE_ID}</td>
                     <td class="sql">${row.SQL}</td>
+                    <td><button type="button" class="btn-copiar" data-idx="${idx}">Copiar SQL</button></td>
                 </tr>`;
             });
             html += "</tbody></table>";
             return html;
+        }
+
+        function ativarBotoesCopiar(linhas) {
+            document.querySelectorAll(".btn-copiar").forEach(botao => {
+                botao.addEventListener("click", () => {
+                    const linha = linhas[Number(botao.dataset.idx)];
+                    const sql = linha.SQL_COMPLETO || linha.SQL;
+                    navigator.clipboard.writeText(sql).then(() => {
+                        const textoOriginal = botao.textContent;
+                        botao.textContent = "Copiado!";
+                        botao.classList.add("copiado");
+                        setTimeout(() => {
+                            botao.textContent = textoOriginal;
+                            botao.classList.remove("copiado");
+                        }, 1500);
+                    }).catch(() => {
+                        alert("Não foi possível copiar automaticamente. SQL:\n\n" + sql);
+                    });
+                });
+            });
         }
 
         function renderContagem(linhas) {
@@ -103,6 +131,7 @@
                         <section><h2>Top Queries Mais Lentas</h2>${renderTabelaQueries(data.top_queries)}</section>
                         <section><h2>Top Processos (Application / ResourceID)</h2>${renderContagem(data.top_processos)}</section>
                     `;
+                    ativarBotoesCopiar(data.top_queries);
                 }
             } catch (e) {
                 resultadoDiv.innerHTML = `<p class="erro">Falha ao analisar: ${e}</p>`;

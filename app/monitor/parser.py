@@ -1,5 +1,5 @@
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 
 @dataclass
@@ -10,6 +10,7 @@ class RegistroConsulta:
     resource_id: str | None
     uri: str | None
     sql: str
+    params: list[str] = field(default_factory=list)
 
 
 def parse_consulta_log(content: str) -> list[RegistroConsulta]:
@@ -17,7 +18,8 @@ def parse_consulta_log(content: str) -> list[RegistroConsulta]:
     Parseia o Monitor_Consulta.log do monitor de consulta do Sankhya.
     Formato: blocos separados por "##ID_<n>##", cada um com o tempo de
     execução (ms), opcionalmente um comentário Runtime-info
-    (Application/ResourceID/uri) e o SQL + Params.
+    (Application/ResourceID/uri), o SQL (com "?" como placeholder) e os
+    Params na ordem em que aparecem no SQL.
     """
     parts = re.split(r"##ID_(\d+)##", content)
     registros: list[RegistroConsulta] = []
@@ -36,10 +38,19 @@ def parse_consulta_log(content: str) -> list[RegistroConsulta]:
         m_resource = re.search(r"ResourceID:\s*(.+)", bloco)
         m_uri = re.search(r"uri:\s*(.+)", bloco)
 
-        sql_parte = bloco.split("Params:")[0]
+        sql_e_params = bloco.split("Params:", 1)
+        sql_parte = sql_e_params[0]
         sql_parte = re.sub(r"/\*\s*Runtime-info.*?\*/", "", sql_parte, flags=re.S)
         sql_parte = re.sub(r"^\s*tempo:\s*\d+\s*\(ms\)", "", sql_parte)
         sql_parte = sql_parte.strip("-\r\n \t")
+
+        params: list[str] = []
+        if len(sql_e_params) > 1:
+            # cada parâmetro fica em "  N = valor" numa linha própria,
+            # na ordem em que aparece no SQL (1, 2, 3...)
+            bruto = sql_e_params[1].split("---")[0]  # corta antes do separador do próximo bloco
+            for m in re.finditer(r"^\s*\d+\s*=\s*(.*)$", bruto, flags=re.MULTILINE):
+                params.append(m.group(1).rstrip("\r"))
 
         registros.append(
             RegistroConsulta(
@@ -49,24 +60,61 @@ def parse_consulta_log(content: str) -> list[RegistroConsulta]:
                 resource_id=m_resource.group(1).strip() if m_resource else None,
                 uri=m_uri.group(1).strip() if m_uri else None,
                 sql=sql_parte,
+                params=params,
             )
         )
 
     return registros
 
 
+def _formatar_valor_sql(valor: str) -> str:
+    """Formata um valor de parâmetro para uso literal dentro do SQL."""
+    v = valor.strip()
+    if v == "" or v.lower() == "null":
+        return "NULL"
+    # número inteiro ou decimal (aceita negativo)
+    if re.fullmatch(r"-?\d+(\.\d+)?", v):
+        return v
+    # string: escapa aspas simples duplicando, conforme padrão SQL
+    return "'" + v.replace("'", "''") + "'"
+
+
+def sql_com_parametros(registro: RegistroConsulta) -> str:
+    """
+    Substitui cada "?" do SQL pelo valor do parâmetro correspondente,
+    na ordem em que aparecem — pronto para colar direto no banco.
+    """
+    if not registro.params:
+        return registro.sql
+
+    partes = registro.sql.split("?")
+    if len(partes) - 1 != len(registro.params):
+        # quantidade de "?" não bate com a quantidade de params capturados —
+        # devolve o SQL original em vez de arriscar uma substituição errada
+        return registro.sql
+
+    resultado = partes[0]
+    for valor, parte_seguinte in zip(registro.params, partes[1:]):
+        resultado += _formatar_valor_sql(valor) + parte_seguinte
+    return resultado
+
+
 def top_queries(registros: list[RegistroConsulta], limite: int = 30) -> list[dict]:
     ordenados = sorted(registros, key=lambda r: r.tempo_ms, reverse=True)[:limite]
-    return [
-        {
-            "ID": r.id,
-            "TEMPO_MS": r.tempo_ms,
-            "APPLICATION": r.application or "-",
-            "RESOURCE_ID": r.resource_id or "-",
-            "SQL": (r.sql[:200] + "...") if len(r.sql) > 200 else r.sql,
-        }
-        for r in ordenados
-    ]
+    resultado = []
+    for r in ordenados:
+        sql_completo = sql_com_parametros(r)
+        resultado.append(
+            {
+                "ID": r.id,
+                "TEMPO_MS": r.tempo_ms,
+                "APPLICATION": r.application or "-",
+                "RESOURCE_ID": r.resource_id or "-",
+                "SQL": (sql_completo[:200] + "...") if len(sql_completo) > 200 else sql_completo,
+                "SQL_COMPLETO": sql_completo,
+            }
+        )
+    return resultado
 
 
 def top_processos(registros: list[RegistroConsulta], limite: int = 30) -> list[dict]:
