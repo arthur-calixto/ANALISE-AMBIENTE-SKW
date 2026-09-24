@@ -27,4 +27,5 @@ CHECKS: list[Check] = [
     Check(id="acoes_agendadas", titulo="Ações Agendadas", exibicao=Exibicao.TABELA),
     Check(id="eventos_erro", titulo="Eventos com Mais Erro (últimos 7 dias)", exibicao=Exibicao.TABELA),
     Check(id="jobs_falhando", titulo="Jobs/Rotinas com Falha", exibicao=Exibicao.TABELA),
+    Check(id="triggers_log", titulo="Triggers que Gravam Log (GRAVATABLOG)", exibicao=Exibicao.TABELA),
 ]

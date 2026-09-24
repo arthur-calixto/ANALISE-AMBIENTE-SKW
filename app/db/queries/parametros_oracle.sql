@@ -18,9 +18,9 @@ SELECT 'REFRESHCARDS', '= 60',
 FROM DUAL LEFT JOIN TSIPAR t ON t.CHAVE = 'REFRESHCARDS'
 UNION ALL
 SELECT 'INATSESSTIMEOUT', '= 5',
-       COALESCE(TO_CHAR(t.TEXTO), '0 (Padrão)'),
-       CASE WHEN t.TEXTO IS NULL THEN 'alerta'
-            WHEN t.TEXTO = '5' THEN 'ok' ELSE 'alerta' END
+       COALESCE(TO_CHAR(t.INTEIRO), '0 (Padrão)'),
+       CASE WHEN t.INTEIRO IS NULL THEN 'alerta'
+            WHEN t.INTEIRO <= '5' THEN 'ok' ELSE 'alerta' END
 FROM DUAL LEFT JOIN TSIPAR t ON t.CHAVE = 'INATSESSTIMEOUT'
 UNION ALL
 SELECT 'DEBUG_ENVMSGJOB', '= N',
@@ -47,14 +47,14 @@ SELECT 'DIASVENCTFILE', '<= 5',
             WHEN t.INTEIRO <= 5 THEN 'ok' ELSE 'alerta' END
 FROM DUAL LEFT JOIN TSIPAR t ON t.CHAVE = 'DIASVENCTFILE'
 UNION ALL
-SELECT 'MAXPAGRELATORIO', '<= 200',
+SELECT 'MAXPAGRELATORIO', '<= 1000',
        COALESCE(TO_CHAR(t.INTEIRO), 'não definido (sem padrão conhecido)'),
        CASE WHEN t.INTEIRO IS NULL THEN 'indefinido'
-            WHEN t.INTEIRO <= 200 THEN 'ok' ELSE 'alerta' END
+            WHEN t.INTEIRO <= 1000 THEN 'ok' ELSE 'alerta' END
 FROM DUAL LEFT JOIN TSIPAR t ON t.CHAVE = 'MAXPAGRELATORIO'
 UNION ALL
 -- padrão conhecido = 'N' (comentário original), que diverge do esperado ('S')
-SELECT 'GERECDCACHE', '= S',
+/*SELECT 'GERECDCACHE', '= S',
        COALESCE(TO_CHAR(t.LOGICO), 'N (padrão)'),
        CASE WHEN t.LOGICO IS NULL THEN 'alerta'  -- padrão (N) != esperado (S)
             WHEN t.LOGICO = 'S' THEN 'ok' ELSE 'alerta' END
@@ -65,7 +65,7 @@ SELECT 'GEREMAILMDDEBUG', '= N',
        CASE WHEN t.LOGICO IS NULL THEN 'ok'  -- padrão (N) == esperado (N)
             WHEN t.LOGICO = 'N' THEN 'ok' ELSE 'alerta' END
 FROM DUAL LEFT JOIN TSIPAR t ON t.CHAVE = 'GEREMAILMDDEBUG'
-UNION ALL
+UNION ALL*/
 SELECT 'HABCOLTELPRO', '= N',
        COALESCE(TO_CHAR(t.LOGICO), '= S (Padrão)'),
        CASE WHEN t.LOGICO IS NULL THEN 'alerta'

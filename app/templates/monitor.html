@@ -4,39 +4,101 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Monitor de Consulta</title>
+
     <link rel="stylesheet" href="/static/styles.css">
+
     <style>
         .upload-box {
-            background: var(--surface); border: 1px dashed var(--border);
-            border-radius: var(--radius-lg); padding: 1.5rem; display: flex;
-            align-items: center; gap: 1rem; flex-wrap: wrap;
+            background: var(--surface);
+            border: 1px dashed var(--border);
+            border-radius: var(--radius-lg);
+            padding: 1.5rem;
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            flex-wrap: wrap;
         }
-        td.sql { max-width: 480px; overflow-wrap: break-word; color: var(--text-muted); }
-        .resumo-stats { display: flex; gap: 0.75rem; margin: 1.25rem 0; flex-wrap: wrap; }
-        .stat { background: var(--surface); border: 1px solid var(--border-soft); border-radius: var(--radius);
-                padding: 0.7rem 1.2rem; }
-        .stat .numero { font-family: var(--font-mono); font-size: 1.3rem; font-weight: 700; color: var(--accent); }
-        .stat .label { font-size: 0.72rem; color: var(--text-faint); text-transform: uppercase; letter-spacing: 0.05em; }
+
+        td.sql {
+            max-width: 480px;
+            overflow-wrap: break-word;
+            color: var(--text-muted);
+        }
+
+        .resumo-stats {
+            display: flex;
+            gap: 0.75rem;
+            margin: 1.25rem 0;
+            flex-wrap: wrap;
+        }
+
+        .stat {
+            background: var(--surface);
+            border: 1px solid var(--border-soft);
+            border-radius: var(--radius);
+            padding: 0.7rem 1.2rem;
+        }
+
+        .stat .numero {
+            font-family: var(--font-mono);
+            font-size: 1.3rem;
+            font-weight: 700;
+            color: var(--accent);
+        }
+
+        .stat .label {
+            font-size: 0.72rem;
+            color: var(--text-faint);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
 
         .btn-copiar {
-            background: transparent; border: 1px solid var(--border); color: var(--text-muted);
-            font-size: 0.7rem; padding: 0.3rem 0.6rem; white-space: nowrap;
+            background: transparent;
+            border: 1px solid var(--border);
+            color: var(--text-muted);
+            font-size: 0.7rem;
+            padding: 0.3rem 0.6rem;
+            white-space: nowrap;
         }
-        .btn-copiar:hover { border-color: var(--accent); color: var(--accent); background: transparent; }
-        .btn-copiar.copiado { border-color: var(--ok); color: var(--ok); }
+
+        .btn-copiar:hover {
+            border-color: var(--accent);
+            color: var(--accent);
+            background: transparent;
+        }
+
+        .btn-copiar.copiado {
+            border-color: var(--ok);
+            color: var(--ok);
+        }
     </style>
 </head>
+
 <body>
+
     <div class="topbar">
         <span class="pulse"></span>
-        <span class="marca">ANÁLISE<span class="sub">/monitor</span></span>
-        <nav><a href="/">← início</a></nav>
+
+        <span class="marca">
+            ANÁLISE<span class="sub">/monitor</span>
+        </span>
+
+        <nav>
+            <a href="/">← início</a>
+        </nav>
     </div>
 
     <main class="page">
+
         <div class="eyebrow">Monitor de consulta</div>
+
         <h1>Análise de Queries e Processos</h1>
-        <div class="meta">Envie o zip exportado pelo monitor de consulta/processos do Sankhya (Monitor_Consulta.log).</div>
+
+        <div class="meta">
+            Envie o zip exportado pelo monitor de consulta/processos do Sankhya
+            (Monitor_Consulta.log).
+        </div>
 
         <div class="upload-box">
             <input type="file" id="arquivo" accept=".zip">
@@ -44,102 +106,368 @@
         </div>
 
         <div id="resultado"></div>
+
     </main>
 
     <script>
+
         const btn = document.getElementById("btn-analisar");
         const inputArquivo = document.getElementById("arquivo");
         const resultadoDiv = document.getElementById("resultado");
 
+
+        /*
+         * Renderiza a tabela das queries mais lentas
+         */
         function renderTabelaQueries(linhas) {
-            if (!linhas || linhas.length === 0) return "<p>Nenhum resultado.</p>";
-            let html = "<table><thead><tr><th>ID</th><th>Tempo (ms)</th><th>Application</th><th>ResourceID</th><th>SQL</th><th></th></tr></thead><tbody>";
+
+            if (!linhas || linhas.length === 0) {
+                return "<p>Nenhum resultado.</p>";
+            }
+
+            let html = `
+                <table>
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Tempo (ms)</th>
+                            <th>Application</th>
+                            <th>ResourceID</th>
+                            <th>SQL</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+            `;
+
             linhas.forEach((row, idx) => {
-                html += `<tr>
-                    <td>${row.ID}</td>
-                    <td>${row.TEMPO_MS}</td>
-                    <td>${row.APPLICATION}</td>
-                    <td>${row.RESOURCE_ID}</td>
-                    <td class="sql">${row.SQL}</td>
-                    <td><button type="button" class="btn-copiar" data-idx="${idx}">Copiar SQL</button></td>
-                </tr>`;
+
+                html += `
+                    <tr>
+                        <td>${row.ID}</td>
+                        <td>${row.TEMPO_MS}</td>
+                        <td>${row.APPLICATION}</td>
+                        <td>${row.RESOURCE_ID}</td>
+                        <td class="sql">${row.SQL}</td>
+                        <td>
+                            <button
+                                type="button"
+                                class="btn-copiar"
+                                data-idx="${idx}">
+                                Copiar SQL
+                            </button>
+                        </td>
+                    </tr>
+                `;
             });
-            html += "</tbody></table>";
+
+            html += `
+                    </tbody>
+                </table>
+            `;
+
             return html;
         }
 
+
+        /*
+         * Copia o SQL para a área de transferência.
+         *
+         * navigator.clipboard funciona em:
+         * - HTTPS
+         * - localhost
+         *
+         * Em HTTP acessado via IP, usamos o fallback
+         * com textarea + document.execCommand("copy").
+         */
+        function copiarTexto(sql) {
+
+            if (navigator.clipboard && window.isSecureContext) {
+
+                return navigator.clipboard.writeText(sql);
+            }
+
+            return new Promise((resolve, reject) => {
+
+                const textarea = document.createElement("textarea");
+
+                textarea.value = sql;
+
+                textarea.style.position = "fixed";
+                textarea.style.top = "-9999px";
+                textarea.style.left = "-9999px";
+
+                document.body.appendChild(textarea);
+
+                textarea.focus();
+                textarea.select();
+
+                try {
+
+                    const sucesso = document.execCommand("copy");
+
+                    document.body.removeChild(textarea);
+
+                    if (sucesso) {
+                        resolve();
+                    } else {
+                        reject(
+                            new Error("execCommand copy retornou false")
+                        );
+                    }
+
+                } catch (e) {
+
+                    document.body.removeChild(textarea);
+
+                    reject(e);
+                }
+            });
+        }
+
+
+        /*
+         * Ativa os botões "Copiar SQL"
+         */
         function ativarBotoesCopiar(linhas) {
+
             document.querySelectorAll(".btn-copiar").forEach(botao => {
+
                 botao.addEventListener("click", () => {
-                    const linha = linhas[Number(botao.dataset.idx)];
+
+                    const linha = linhas[
+                        Number(botao.dataset.idx)
+                    ];
+
                     const sql = linha.SQL_COMPLETO || linha.SQL;
-                    navigator.clipboard.writeText(sql).then(() => {
-                        const textoOriginal = botao.textContent;
-                        botao.textContent = "Copiado!";
-                        botao.classList.add("copiado");
-                        setTimeout(() => {
-                            botao.textContent = textoOriginal;
-                            botao.classList.remove("copiado");
-                        }, 1500);
-                    }).catch(() => {
-                        alert("Não foi possível copiar automaticamente. SQL:\n\n" + sql);
-                    });
+
+                    copiarTexto(sql)
+                        .then(() => {
+
+                            const textoOriginal =
+                                botao.textContent;
+
+                            botao.textContent = "Copiado!";
+                            botao.classList.add("copiado");
+
+                            setTimeout(() => {
+
+                                botao.textContent = textoOriginal;
+                                botao.classList.remove("copiado");
+
+                            }, 1500);
+                        })
+                        .catch(() => {
+
+                            alert(
+                                "Não foi possível copiar automaticamente. " +
+                                "SQL:\n\n" + sql
+                            );
+                        });
                 });
             });
         }
 
+
+        /*
+         * Renderiza os processos agrupados
+         */
         function renderContagem(linhas) {
-            if (!linhas || linhas.length === 0) return "<p>Nenhum resultado.</p>";
+
+            if (!linhas || linhas.length === 0) {
+                return "<p>Nenhum resultado.</p>";
+            }
+
             let html = '<div class="contagem-grid">';
+
             linhas.forEach(row => {
+
                 html += `
                     <div class="contagem-card">
-                        <div class="titulo">${row.TITULO}</div>
-                        <div class="numero">${row.CONTAGEM}</div>
-                        <div class="detalhe">${row.DETALHE}</div>
-                    </div>`;
+
+                        <div class="titulo">
+                            ${row.TITULO}
+                        </div>
+
+                        <div class="numero">
+                            ${row.CONTAGEM}
+                        </div>
+
+                        <div class="detalhe">
+                            ${row.DETALHE}
+                        </div>
+
+                    </div>
+                `;
             });
+
             html += "</div>";
+
             return html;
         }
 
+
+        /*
+         * Evento do botão Analisar
+         */
         btn.addEventListener("click", async () => {
+
+            /*
+             * Verifica se foi selecionado um arquivo
+             */
             if (!inputArquivo.files.length) {
-                resultadoDiv.innerHTML = '<p class="erro">Selecione o arquivo .zip primeiro.</p>';
+
+                resultadoDiv.innerHTML =
+                    '<p class="erro">Selecione o arquivo .zip primeiro.</p>';
+
                 return;
             }
 
+
+            /*
+             * Desabilita o botão enquanto processa
+             */
             btn.disabled = true;
             btn.textContent = "Analisando...";
+
             resultadoDiv.innerHTML = "";
 
+
+            /*
+             * Monta o formulário
+             */
             const formData = new FormData();
-            formData.append("arquivo", inputArquivo.files[0]);
+
+            formData.append(
+                "arquivo",
+                inputArquivo.files[0]
+            );
+
 
             try {
-                const resp = await fetch("/monitor/analisar", { method: "POST", body: formData });
+
+                /*
+                 * Envia o arquivo para o backend
+                 */
+                const resp = await fetch(
+                    "/monitor/analisar",
+                    {
+                        method: "POST",
+                        body: formData
+                    }
+                );
+
+
+                /*
+                 * Converte resposta para JSON
+                 */
                 const data = await resp.json();
 
+
+                /*
+                 * Trata erro retornado pelo backend
+                 */
                 if (data.erro) {
-                    resultadoDiv.innerHTML = `<p class="erro">${data.erro}</p>`;
-                } else {
+
                     resultadoDiv.innerHTML = `
-                        <div class="resumo-stats">
-                            <div class="stat"><div class="numero">${data.total_registros}</div><div class="label">Queries analisadas</div></div>
-                            <div class="stat"><div class="numero">${data.tempo_total_ms}</div><div class="label">Tempo total (ms)</div></div>
-                        </div>
-                        <section><h2>Top Queries Mais Lentas</h2>${renderTabelaQueries(data.top_queries)}</section>
-                        <section><h2>Top Processos (Application / ResourceID)</h2>${renderContagem(data.top_processos)}</section>
+                        <p class="erro">
+                            ${data.erro}
+                        </p>
                     `;
-                    ativarBotoesCopiar(data.top_queries);
+
+                } else {
+
+                    /*
+                     * Renderiza os resultados
+                     */
+                    resultadoDiv.innerHTML = `
+
+                        <div class="resumo-stats">
+
+                            <div class="stat">
+
+                                <div class="numero">
+                                    ${data.total_registros}
+                                </div>
+
+                                <div class="label">
+                                    Queries analisadas
+                                </div>
+
+                            </div>
+
+
+                            <div class="stat">
+
+                                <div class="numero">
+                                    ${data.tempo_total_ms}
+                                </div>
+
+                                <div class="label">
+                                    Tempo total (ms)
+                                </div>
+
+                            </div>
+
+                        </div>
+
+
+                        <section>
+
+                            <h2>
+                                Top Queries Mais Lentas
+                            </h2>
+
+                            ${renderTabelaQueries(
+                                data.top_queries
+                            )}
+
+                        </section>
+
+
+                        <section>
+
+                            <h2>
+                                Top Processos (Application / ResourceID)
+                            </h2>
+
+                            ${renderContagem(
+                                data.top_processos
+                            )}
+
+                        </section>
+                    `;
+
+
+                    /*
+                     * Só depois de renderizar a tabela,
+                     * ativa os eventos dos botões.
+                     */
+                    ativarBotoesCopiar(
+                        data.top_queries
+                    );
                 }
+
             } catch (e) {
-                resultadoDiv.innerHTML = `<p class="erro">Falha ao analisar: ${e}</p>`;
+
+                resultadoDiv.innerHTML = `
+                    <p class="erro">
+                        Falha ao analisar: ${e}
+                    </p>
+                `;
+
             } finally {
+
+                /*
+                 * Reabilita o botão
+                 */
                 btn.disabled = false;
                 btn.textContent = "Analisar";
             }
+
         });
+
     </script>
+
 </body>
 </html>

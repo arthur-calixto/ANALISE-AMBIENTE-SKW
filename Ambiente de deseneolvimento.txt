@@ -4,6 +4,7 @@ docker save -o analise.tar analise-ambiente:latest
 
 #Ambiente de produção
 
+docker compose down
 
 docker rmi analise-ambiente:latest   
 
