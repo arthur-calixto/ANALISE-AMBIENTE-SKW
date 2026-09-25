@@ -74,3 +74,23 @@ Não precisa mexer em rota nem template — o dashboard já itera sobre
 ## Deploy automatizado
 
 Consulte o [guia de deploy por botão](docs/deploy.md).
+
+## Relatório PDF
+
+O relatório inclui resumo da coleta, sumário com páginas e links, descrições curtas
+e orientações para cada evidência. Os textos ficam em `app/pdf_guidance.py`; ao
+adicionar uma análise em `CHECKS`, inclua também sua descrição nesse arquivo.
+
+Falha de coleta, resultado ausente e consulta sem registros são apresentados
+separadamente. Os alertas seguem as classificações das consultas e não constituem
+um diagnóstico automático. Tabelas com mais de seis colunas são exibidas como
+fichas por registro. Valores acima de 350 caracteres são marcados como abreviados.
+
+Para validar, instale as dependências de `requirements.txt` no ambiente Python e
+o utilitário `pdftotext` (pacote `poppler-utils` no Linux), usado apenas nos testes:
+
+```bash
+venv/bin/python -m unittest discover -s tests -v
+```
+
+As prévias locais em `previews/` não são versionadas.
