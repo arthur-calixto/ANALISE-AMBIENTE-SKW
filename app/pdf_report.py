@@ -1,203 +1,203 @@
 import io
 from datetime import datetime
+from xml.sax.saxutils import escape
 
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import cm
-from reportlab.platypus import (
-    SimpleDocTemplate,
-    Paragraph,
-    Spacer,
-    Table,
-    TableStyle,
-    PageBreak,
-)
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, PageBreak
+from reportlab.platypus.tableofcontents import TableOfContents
 
-COR_ALERTA = colors.HexColor("#fca5a5")
-COR_OK = colors.HexColor("#bbf7d0")
-COR_INDEFINIDO = colors.HexColor("#e2e8f0")
+from app.pdf_guidance import GUIAS
+
 COR_ACCENT = colors.HexColor("#0f766e")
-COR_TEXTO_MUTED = colors.HexColor("#555555")
+COR_ALERTA = colors.HexColor("#fee2e2")
+COR_OK = colors.HexColor("#dcfce7")
+COR_INDEFINIDO = colors.HexColor("#f1f5f9")
+LARGURA = A4[0] - 3.2 * cm
+LIMITE_CELULA = 350
+STATUS = {"ok": "Dentro da referência", "alerta": "Revisar", "indefinido": "Sem referência"}
+
+ROTULOS = {
+    "PARAMETRO": "Parâmetro", "ESPERADO": "Referência", "ATUAL": "Valor encontrado",
+    "STATUS": "Avaliação", "TITULO": "Integração", "CONTAGEM": "Contagem",
+    "DETALHE": "Detalhe", "WAITING_SID": "Sessão em espera",
+    "BLOCKING_SID": "Sessão que bloqueia", "SECONDS_IN_WAIT": "Espera (s)",
+    "WAITING_SESSION_ID": "Sessão em espera", "BLOCKING_SESSION_ID": "Sessão que bloqueia",
+    "WAIT_TIME_MS": "Espera (ms)", "DESCRICAO_JOB": "Rotina",
+    "QTDFALHAS": "Falhas registradas", "MSGERRO": "Mensagem",
+    "ULTIMA_EXECUCAO": "Última execução", "DESCRICAO": "Descrição",
+    "TEMPO_MEDIO_SEGUNDOS": "Tempo médio (s)", "TEMPO_TOTAL_SEGUNDOS": "Tempo total (s)",
+    "TOTAL_ERROS": "Total de erros", "ERROS": "Erros", "EXECUCOES": "Execuções",
+    "TRIGGER_NAME": "Trigger", "TABLE_NAME": "Tabela", "TRIGGER_STATUS": "Estado da trigger",
+    "TRIGGERING_EVENT": "Evento", "RECURSO": "Recurso", "QTD": "Quantidade",
+}
 
 
-def _valor(v) -> str:
-    return "" if v is None else str(v)
+def _valor(value):
+    return "—" if value is None else str(value)
 
 
-def _status_da_linha(row: dict) -> str:
-    return str(row.get("STATUS", "")).lower()
+def _status_da_linha(row):
+    return str(row.get("STATUS", "")).strip().lower()
 
 
-def _tabela_generica(linhas: list[dict], styles) -> Table:
-    colunas = [c for c in linhas[0].keys() if c != "STATUS"]
+def _texto(value):
+    return escape(_valor(value)).replace("\n", "<br/>")
 
-    largura_disponivel = 18.4 * cm
-    largura_col = largura_disponivel / len(colunas)
 
-    cabecalho = [Paragraph(f"<b>{c}</b>", styles["CelulaCabecalho"]) for c in colunas]
-    dados = [cabecalho]
-    cor_linhas = []
-    for i, row in enumerate(linhas, start=1):
-        dados.append([Paragraph(_valor(row.get(c))[:200], styles["Celula"]) for c in colunas])
-        if _status_da_linha(row) == "alerta":
-            cor_linhas.append(i)
+def _celula(value, style, limitar=True):
+    text = _valor(value)
+    if limitar and len(text) > LIMITE_CELULA:
+        text = text[:LIMITE_CELULA] + "… [abreviado]"
+    return Paragraph(_texto(text), style)
 
-    tabela = Table(dados, repeatRows=1, colWidths=[largura_col] * len(colunas))
-    estilo = [
+
+class RelatorioDoc(SimpleDocTemplate):
+    def afterFlowable(self, flowable):
+        if hasattr(flowable, "chave_sumario"):
+            key = flowable.chave_sumario
+            self.canv.bookmarkPage(key)
+            self.canv.addOutlineEntry(flowable.getPlainText(), key, level=0)
+            self.notify("TOCEntry", (0, flowable.text, self.page, key))
+
+
+def _rodape(canvas, doc):
+    canvas.saveState()
+    canvas.setStrokeColor(colors.HexColor("#cbd5e1"))
+    canvas.line(doc.leftMargin, 1.25 * cm, A4[0] - doc.rightMargin, 1.25 * cm)
+    canvas.setFont("Helvetica", 8)
+    canvas.setFillColor(colors.HexColor("#64748b"))
+    canvas.drawString(doc.leftMargin, .85 * cm, "Análise de Ambiente")
+    canvas.drawRightString(A4[0] - doc.rightMargin, .85 * cm, f"Página {doc.page}")
+    canvas.restoreState()
+
+
+def _resultado(check_id, resultados):
+    if resultados.get(f"{check_id}_erro"):
+        return "Não foi possível verificar: houve erro na coleta."
+    if check_id not in resultados or resultados[check_id] is None:
+        return "Não foi possível verificar: resultado não recebido."
+    rows = resultados[check_id]
+    if not rows:
+        return "Sem ocorrências: a consulta não retornou registros no recorte analisado."
+    alerta = sum(_status_da_linha(r) == "alerta" for r in rows)
+    indef = sum(_status_da_linha(r) == "indefinido" for r in rows)
+    partes = [f"{len(rows)} registro(s) retornado(s)"]
+    if alerta:
+        partes.append(f"{alerta} para revisão")
+    if indef:
+        partes.append(f"{indef} sem referência definida")
+    if any(_status_da_linha(r) not in STATUS for r in rows):
+        partes.append("há registros sem classificação automática")
+    return "; ".join(partes) + "."
+
+
+def _tabela(headers, rows, styles, widths=None, statuses=None):
+    data = [[_celula(h, styles["Cabecalho"], False) for h in headers]]
+    data.extend([[_celula(v, styles["Celula"]) for v in row] for row in rows])
+    table = Table(data, colWidths=widths or [LARGURA / len(headers)] * len(headers), repeatRows=1)
+    commands = [
         ("BACKGROUND", (0, 0), (-1, 0), COR_ACCENT),
-        ("FONTSIZE", (0, 0), (-1, -1), 7),
-        ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#dddddd")),
         ("VALIGN", (0, 0), (-1, -1), "TOP"),
-        ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#f7f7f8")]),
+        ("GRID", (0, 0), (-1, -1), .35, colors.HexColor("#cbd5e1")),
+        ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#f8fafc")]),
+        ("TOPPADDING", (0, 0), (-1, -1), 6),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
     ]
-    for i in cor_linhas:
-        estilo.append(("BACKGROUND", (0, i), (-1, i), COR_ALERTA))
-    tabela.setStyle(TableStyle(estilo))
-    return tabela
+    for index, status in enumerate(statuses or [], 1):
+        if status in STATUS:
+            commands.append(("BACKGROUND", (0, index), (-1, index),
+                             {"alerta": COR_ALERTA, "ok": COR_OK, "indefinido": COR_INDEFINIDO}[status]))
+    table.setStyle(TableStyle(commands))
+    return table
 
 
-def _tabela_cards(linhas: list[dict], styles) -> Table:
-    dados = [["Parâmetro", "Esperado", "Atual", "Status"]]
-    cores = []
-    for i, row in enumerate(linhas, start=1):
-        status = _status_da_linha(row) or "indefinido"
-        dados.append([
-            _valor(row.get("PARAMETRO")),
-            _valor(row.get("ESPERADO")) or "—",
-            _valor(row.get("ATUAL")),
-            status.upper(),
-        ])
-        cores.append((i, status))
-
-    tabela = Table(dados, repeatRows=1, colWidths=[5.5 * cm, 3.5 * cm, 4.5 * cm, 3 * cm])
-    estilo = [
-        ("BACKGROUND", (0, 0), (-1, 0), COR_ACCENT),
-        ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
-        ("FONTSIZE", (0, 0), (-1, -1), 8),
-        ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#dddddd")),
-    ]
-    for i, status in cores:
-        cor = {"ok": COR_OK, "alerta": COR_ALERTA}.get(status, COR_INDEFINIDO)
-        estilo.append(("BACKGROUND", (0, i), (-1, i), cor))
-    tabela.setStyle(TableStyle(estilo))
-    return tabela
+def _evidencias(rows, styles):
+    # Não descarta colunas presentes apenas em registros posteriores.
+    columns = list(dict.fromkeys(key for row in rows for key in row))
+    if not columns:
+        return [Paragraph("Registros recebidos sem campos para exibição.", styles["Texto"])]
+    def value(row, col):
+        if col == "STATUS":
+            return STATUS.get(_status_da_linha(row), _valor(row.get(col)))
+        return row.get(col)
+    if len(columns) <= 6:
+        return [_tabela([ROTULOS.get(c.upper(), c.replace("_", " ")) for c in columns],
+                        [[value(r, c) for c in columns] for r in rows], styles,
+                        statuses=[_status_da_linha(r) for r in rows])]
+    # Muitas colunas ficam ilegíveis em A4: exibir cada registro como ficha.
+    result = []
+    for index, row in enumerate(rows, 1):
+        result.append(Paragraph(f"Registro {index}", styles["Subtitulo"]))
+        result.append(_tabela(["Campo", "Valor"],
+                             [[ROTULOS.get(c.upper(), c.replace("_", " ")), value(row, c)] for c in columns],
+                             styles, [LARGURA * .32, LARGURA * .68]))
+        result.append(Spacer(1, 8))
+    return result
 
 
-def _tabela_contagem(linhas: list[dict], styles) -> Table:
-    dados = [["Título", "Contagem", "Detalhe"]]
-    cores = []
-    for i, row in enumerate(linhas, start=1):
-        status = _status_da_linha(row)
-        dados.append([
-            Paragraph(_valor(row.get("TITULO"))[:60], styles["Celula"]),
-            _valor(row.get("CONTAGEM")),
-            Paragraph(_valor(row.get("DETALHE"))[:150], styles["Celula"]),
-        ])
-        if status == "alerta":
-            cores.append(i)
-
-    tabela = Table(dados, repeatRows=1, colWidths=[5 * cm, 2 * cm, 9.5 * cm])
-    estilo = [
-        ("BACKGROUND", (0, 0), (-1, 0), COR_ACCENT),
-        ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
-        ("FONTSIZE", (0, 0), (-1, -1), 7.5),
-        ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#dddddd")),
-        ("VALIGN", (0, 0), (-1, -1), "TOP"),
-    ]
-    for i in cores:
-        estilo.append(("BACKGROUND", (0, i), (-1, i), COR_ALERTA))
-    tabela.setStyle(TableStyle(estilo))
-    return tabela
-
-
-def gerar_relatorio_pdf(
-    cliente_id: str,
-    db_type: str,
-    checks_meta: list[dict],
-    resultados: dict,
-) -> io.BytesIO:
-    """
-    checks_meta: [{"id": ..., "titulo": ..., "exibicao": "tabela"|"cards"|"contagem"}, ...]
-    resultados: mesmo dict devolvido por /analise/{id}/executar
-    """
+def gerar_relatorio_pdf(cliente_id, db_type, checks_meta, resultados):
+    """Gera relatório com navegação e textos curtos, sem novas consultas ao banco."""
     buffer = io.BytesIO()
-    doc = SimpleDocTemplate(
-        buffer, pagesize=A4,
-        topMargin=1.8 * cm, bottomMargin=1.8 * cm,
-        leftMargin=1.6 * cm, rightMargin=1.6 * cm,
-    )
-
-    base_styles = getSampleStyleSheet()
+    doc = RelatorioDoc(buffer, pagesize=A4, topMargin=1.8 * cm, bottomMargin=1.8 * cm,
+                       leftMargin=1.6 * cm, rightMargin=1.6 * cm,
+                       title="Relatório de Análise de Ambiente", author="Análise de Ambiente")
+    base = getSampleStyleSheet()
     styles = {
-        "Titulo": ParagraphStyle("Titulo", parent=base_styles["Title"], textColor=COR_ACCENT, fontSize=18),
-        "Meta": ParagraphStyle("Meta", parent=base_styles["Normal"], textColor=COR_TEXTO_MUTED, fontSize=9),
-        "SecaoTitulo": ParagraphStyle("SecaoTitulo", parent=base_styles["Heading2"], fontSize=12, spaceBefore=14, spaceAfter=6),
-        "Celula": ParagraphStyle("Celula", parent=base_styles["Normal"], fontSize=7.5, leading=9),
-        "CelulaCabecalho": ParagraphStyle("CelulaCabecalho", parent=base_styles["Normal"], fontSize=7, leading=8.5, textColor=colors.white),
+        "Titulo": ParagraphStyle("Titulo", parent=base["Title"], fontSize=22, leading=27, textColor=COR_ACCENT, spaceAfter=18),
+        "Secao": ParagraphStyle("Secao", parent=base["Heading2"], fontSize=13, leading=17, textColor=COR_ACCENT, spaceBefore=16, spaceAfter=8, keepWithNext=True),
+        "Subtitulo": ParagraphStyle("Subtitulo", parent=base["Heading3"], fontSize=9, keepWithNext=True),
+        "Texto": ParagraphStyle("Texto", parent=base["Normal"], fontSize=9, leading=13, spaceAfter=7),
+        "Introducao": ParagraphStyle("Introducao", parent=base["Normal"], fontSize=9, leading=13, spaceAfter=7, keepWithNext=True),
+        "Celula": ParagraphStyle("Celula", parent=base["Normal"], fontSize=8, leading=10),
+        "Cabecalho": ParagraphStyle("Cabecalho", parent=base["Normal"], fontSize=8, leading=10, textColor=colors.white),
     }
-
-    story = []
-    story.append(Paragraph("Relatório de Análise de Ambiente", styles["Titulo"]))
-    story.append(Spacer(1, 4))
-    agora = datetime.now().strftime("%d/%m/%Y às %H:%M")
-    story.append(Paragraph(f"Cliente: <b>{cliente_id}</b> &nbsp;·&nbsp; Banco: <b>{db_type}</b> &nbsp;·&nbsp; Gerado em {agora}", styles["Meta"]))
-    story.append(Spacer(1, 10))
-
-    # ------------------------------------------------------------ resumo
-    total_ok = total_alerta = total_indef = 0
-    for check in checks_meta:
-        linhas = resultados.get(check["id"]) or []
-        for row in linhas:
-            s = _status_da_linha(row)
-            if s == "ok":
-                total_ok += 1
-            elif s == "alerta":
-                total_alerta += 1
-            elif s == "indefinido":
-                total_indef += 1
-
-    resumo = Table(
-        [["Em alerta", "Sem baseline", "OK"], [str(total_alerta), str(total_indef), str(total_ok)]],
-        colWidths=[5 * cm, 5 * cm, 5 * cm],
-    )
-    resumo.setStyle(TableStyle([
-        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#f0f0f0")),
-        ("FONTSIZE", (0, 0), (-1, 0), 9),
-        ("FONTSIZE", (0, 1), (-1, 1), 16),
-        ("FONTNAME", (0, 1), (-1, 1), "Helvetica-Bold"),
-        ("TEXTCOLOR", (0, 1), (0, 1), colors.HexColor("#b91c1c")),
-        ("TEXTCOLOR", (2, 1), (2, 1), colors.HexColor("#15803d")),
-        ("ALIGN", (0, 0), (-1, -1), "CENTER"),
-        ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#dddddd")),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 8),
-        ("TOPPADDING", (0, 0), (-1, -1), 8),
-    ]))
-    story.append(resumo)
-    story.append(Spacer(1, 6))
-
-    # ------------------------------------------------------------ seções
-    for check in checks_meta:
-        erro = resultados.get(f"{check['id']}_erro")
-        linhas = resultados.get(check["id"])
-
-        story.append(Paragraph(check["titulo"], styles["SecaoTitulo"]))
-
+    story = [Paragraph("Relatório de Análise<br/>de Ambiente", styles["Titulo"]),
+             Paragraph(f"<b>Cliente:</b> {_texto(cliente_id)}<br/><b>Banco:</b> {_texto(db_type)}<br/>"
+                       f"<b>Emissão:</b> {datetime.now():%d/%m/%Y às %H:%M}", styles["Texto"]),
+             Spacer(1, 15), Paragraph("Resumo da coleta", styles["Secao"])]
+    falhas = sum(bool(resultados.get(f"{c['id']}_erro")) or resultados.get(c["id"]) is None for c in checks_meta)
+    rows_validas = [r for c in checks_meta if not resultados.get(f"{c['id']}_erro") for r in (resultados.get(c["id"]) or [])]
+    alertas = sum(_status_da_linha(r) == "alerta" for r in rows_validas)
+    story.append(_tabela(["Análises previstas", "Análises não verificadas", "Registros para revisão"],
+                         [[len(checks_meta), falhas, alertas]], styles))
+    story += [Spacer(1, 12),
+              Paragraph("As contagens refletem os registros retornados pelas consultas. "
+                        "Ausência de alertas não garante ausência de problemas.", styles["Texto"]),
+              Paragraph("<b>Como ler:</b> Revisar = ponto de atenção; Dentro da referência = atende ao critério da consulta; "
+                        "Sem referência = avaliação indefinida. Registros sem classificação exigem interpretação.", styles["Texto"]),
+              Paragraph("Valores extensos são abreviados em 350 caracteres e marcados como [abreviado]. "
+                        "Consulte os detalhes completos no dashboard.", styles["Texto"]),
+              PageBreak(), Paragraph("Sumário", styles["Titulo"]),
+              Paragraph("Clique no título ou no número da página para abrir a evidência.", styles["Texto"])]
+    toc = TableOfContents()
+    toc.levelStyles = [ParagraphStyle("SumarioItem", fontName="Helvetica", fontSize=11,
+                                     leading=16, spaceBefore=9, textColor=COR_ACCENT)]
+    toc.dotsMinLevel = 0
+    story += [toc, PageBreak()]
+    for index, check in enumerate(checks_meta, 1):
+        cid = check["id"]
+        titulo, descricao, orientacao = GUIAS.get(cid, (check["titulo"],
+            "Apresenta os registros retornados por esta análise.", "Validar os resultados com a equipe responsável."))
+        heading = Paragraph(f"{index}. {_texto(titulo)}", styles["Secao"])
+        heading.chave_sumario = f"evidencia-{index}"
+        story += [heading,
+                  Paragraph(f"<b>O que verifica:</b> {_texto(descricao)}", styles["Introducao"]),
+                  Paragraph(f"<b>Resultado:</b> {_texto(_resultado(cid, resultados))}", styles["Texto"])]
+        erro = resultados.get(f"{cid}_erro")
+        rows = resultados.get(cid)
         if erro:
-            story.append(Paragraph(f"<font color='#b91c1c'>Erro: {erro}</font>", styles["Meta"]))
-            continue
-
-        if not linhas:
-            story.append(Paragraph("Nenhum resultado.", styles["Meta"]))
-            continue
-
-        if check["exibicao"] == "cards":
-            story.append(_tabela_cards(linhas, styles))
-        elif check["exibicao"] == "contagem":
-            story.append(_tabela_contagem(linhas, styles))
+            story.append(Paragraph("<b>Orientação:</b> verificar acesso ao banco e permissões; repetir a coleta.", styles["Texto"]))
+            story.append(_celula(f"Detalhe técnico: {erro}", styles["Texto"]))
+        elif rows is None:
+            story.append(Paragraph("<b>Orientação:</b> executar novamente a análise antes de concluir.", styles["Texto"]))
+        elif rows:
+            story.extend(_evidencias(rows, styles))
+            story += [Spacer(1, 7), Paragraph(f"<b>Orientação:</b> {_texto(orientacao)}", styles["Texto"])]
         else:
-            story.append(_tabela_generica(linhas, styles))
-
-    doc.build(story)
+            story.append(Paragraph("A ausência de registros se limita ao período e aos filtros da consulta.", styles["Texto"]))
+    doc.multiBuild(story, onFirstPage=_rodape, onLaterPages=_rodape)
     buffer.seek(0)
     return buffer
