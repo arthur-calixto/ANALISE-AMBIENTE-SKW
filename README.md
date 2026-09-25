@@ -76,3 +76,7 @@ Não precisa mexer em rota nem template — o dashboard já itera sobre
       análise (hoje qualquer um com acesso à rede vê a lista de
       clientes e pode rodar queries).
 - [ ] Coleta de JStack/JFR (fase 2).
+
+## Deploy automatizado
+
+Consulte o [guia de deploy por botão](docs/deploy.md).
