@@ -69,11 +69,12 @@ jobs:
       PROD_ENV_FILE: ${{ vars.PROD_ENV_FILE }}
       PROD_DATA_DIR: ${{ vars.PROD_DATA_DIR }}
       COMPOSE_PROJECT_NAME: ${{ vars.COMPOSE_PROJECT_NAME }}
-      DOCKER_CONFIG: ${{ runner.temp }}/docker-auth-${{ github.run_id }}-${{ github.run_attempt }}
     steps:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
+      - name: Preparar autenticação temporária
+        run: echo "DOCKER_CONFIG=$RUNNER_TEMP/docker-auth-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT" >> "$GITHUB_ENV"
       - name: Autenticar no GHCR
         env:
           GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
