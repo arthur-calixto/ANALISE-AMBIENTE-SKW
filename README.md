@@ -70,12 +70,6 @@ nova análise:
 Não precisa mexer em rota nem template — o dashboard já itera sobre
 `CHECKS` sozinho.
 
-## Pendências conhecidas (próximos passos)
-
-- [ ] Autenticação/controle de acesso na tela inicial e nas rotas de
-      análise (hoje qualquer um com acesso à rede vê a lista de
-      clientes e pode rodar queries).
-- [ ] Coleta de JStack/JFR (fase 2).
 
 ## Deploy automatizado
 
