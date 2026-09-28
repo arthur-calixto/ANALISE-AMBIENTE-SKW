@@ -114,7 +114,7 @@ def _tabela(headers, rows, styles, widths=None, statuses=None):
     return table
 
 
-def _evidencias(rows, styles):
+def _evidencias(rows, styles, check_id=None):
     # Não descarta colunas presentes apenas em registros posteriores.
     columns = list(dict.fromkeys(key for row in rows for key in row))
     if not columns:
@@ -123,6 +123,31 @@ def _evidencias(rows, styles):
         if col == "STATUS":
             return STATUS.get(_status_da_linha(row), _valor(row.get(col)))
         return row.get(col)
+    if check_id == "acoes_agendadas":
+        # Uma linha por ação, inclusive quando a consulta possui muitas colunas.
+        labels = {"NUAAG": "Código", "STATUS_ACAO": "Ativa",
+                  "EXPGATILHO": "Agendamento", "ACAO": "Ação",
+                  "DESCRICAO": "Descrição", "TEMPO_MEDIO_SEGUNDOS": "Média (s)",
+                  "ULTIMA_EXECUCAO": "Última execução", "TOTAL_ERROS": "Erros",
+                  "STATUS": "Avaliação"}
+        weights = {"NUAAG": 7, "STATUS_ACAO": 5, "EXPGATILHO": 11,
+                   "ACAO": 13, "DESCRICAO": 22, "TEMPO_MEDIO_SEGUNDOS": 7,
+                   "ULTIMA_EXECUCAO": 14, "TOTAL_ERROS": 6, "STATUS": 12}
+        total = sum(weights.get(c.upper(), 10) for c in columns)
+        compact = dict(styles)
+        for key in ("Cabecalho", "Celula"):
+            compact[key] = ParagraphStyle(f"{key}Acoes", parent=styles[key], fontSize=7, leading=9)
+        table = _tabela([labels.get(c.upper(), ROTULOS.get(c.upper(), c.replace("_", " "))) for c in columns],
+                        [[value(r, c) for c in columns] for r in rows], compact,
+                        widths=[LARGURA * weights.get(c.upper(), 10) / total for c in columns],
+                        statuses=[_status_da_linha(r) for r in rows])
+        table.setStyle(TableStyle([
+            ("LEFTPADDING", (0, 0), (-1, -1), 3),
+            ("RIGHTPADDING", (0, 0), (-1, -1), 3),
+            ("TOPPADDING", (0, 0), (-1, -1), 4),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+        ]))
+        return [table]
     if len(columns) <= 6:
         return [_tabela([ROTULOS.get(c.upper(), c.replace("_", " ")) for c in columns],
                         [[value(r, c) for c in columns] for r in rows], styles,
@@ -194,7 +219,7 @@ def gerar_relatorio_pdf(cliente_id, db_type, checks_meta, resultados):
         elif rows is None:
             story.append(Paragraph("<b>Orientação:</b> executar novamente a análise antes de concluir.", styles["Texto"]))
         elif rows:
-            story.extend(_evidencias(rows, styles))
+            story.extend(_evidencias(rows, styles, cid))
             story += [Spacer(1, 7), Paragraph(f"<b>Orientação:</b> {_texto(orientacao)}", styles["Texto"])]
         else:
             story.append(Paragraph("A ausência de registros se limita ao período e aos filtros da consulta.", styles["Texto"]))
