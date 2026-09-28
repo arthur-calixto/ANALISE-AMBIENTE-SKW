@@ -84,7 +84,8 @@ adicionar uma análise em `CHECKS`, inclua também sua descrição nesse arquivo
 Falha de coleta, resultado ausente e consulta sem registros são apresentados
 separadamente. Os alertas seguem as classificações das consultas e não constituem
 um diagnóstico automático. Tabelas com mais de seis colunas são exibidas como
-fichas por registro. Valores acima de 350 caracteres são marcados como abreviados.
+fichas por registro, exceto ações agendadas, que permanecem em uma tabela única
+com uma linha por ação e cabeçalho repetido nas páginas seguintes. Valores acima de 350 caracteres são marcados como abreviados.
 
 Para validar, instale as dependências de `requirements.txt` no ambiente Python e
 o utilitário `pdftotext` (pacote `poppler-utils` no Linux), usado apenas nos testes:
